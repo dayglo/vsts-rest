@@ -1,298 +1,309 @@
-// https://{instance}[/{collection}[/{team-project}]/_apis[/{area}]/{resource}?api-version={version}
 var request = require("request");
 
-var vstsApi = {}
+module.exports = function(vstsAccount, token) {
 
-vstsApi.getObject = (url) => {
-    return new Promise((resolve, reject)=>{
-        var options = { method: 'GET',
-            url: url,
-            headers: {
-                accept: 'application/json',
-                'content-type': 'application/json',
-                origin: 'https://' + vstsAccount + '.visualstudio.com'
-            },
-            json: true 
-        };
+    var vstsApi = {}
 
-        request(options, function (error, response, body) {
-            if (error) reject( new Error(error))
-            else resolve(body)
-        }).auth('',token);
-    })
-}
+    var endPoint = 'https://'+ vstsAccount +'.visualstudio.com'
 
+    vstsApi.getObject = (url) => {
+        return new Promise((resolve, reject)=>{
+            var options = { method: 'GET',
+                url: endPoint +  url,
+                headers: {
+                    accept: 'application/json',
+                    'content-type': 'application/json',
+                    origin: endPoint
+                },
+                json: true 
+            };
 
-vstsApi.createProject = (projectName) => {
-    return new Promise((resolve, reject)=>{
+            request(options, function (error, response, body) {
+                if (error) reject( new Error(error))
+                else resolve(body)
+            }).auth('',token);
+        })
+    }
 
-        var options = { method: 'POST',
-            url: 'https://' + vstsAccount + '.visualstudio.com/_api/_project/CreateProject',
-            headers: {
-                accept: 'application/json;api-version=4.1-preview.6;excludeUrls=true',
-                'content-type': 'application/json',
-                origin: 'https://' + vstsAccount + '.visualstudio.com'
-            },
-            body: { 
-                projectName: projectName,
-                projectDescription: '',
-                processTemplateTypeId: 'adcc42ab-9882-485e-a3ed-7678f01f66bc',
-                collectionId: 'ba47a542-7971-4401-8d4e-aaa5f04d9ec6',
-                source: 'NewProjectCreation:',
-                projectData: '{"VersionControlOption":"Git","ProjectVisibilityOption":null}' 
-            },
-            json: true 
-        };
-
-        request(options, function (error, response, body) {
-            if (error) reject( new Error(error))
-            else resolve(body)
-        }).auth('',token);
-    })
-}
-
-
-
-vstsApi.createBuildDefinition = (vstsAccount,projectId,queueId, buildDefinitionName) => {
-    return new Promise((resolve, reject)=>{
-        var url = 'https://' + vstsAccount + '.visualstudio.com/' + projectId + '/_apis/build/Definitions';
-
-        var buildProcess = {
-            phases:[ 
-                { 
-                    steps: 
-                    [ { environment: {},
-                    enabled: true,
-                    continueOnError: false,
-                    alwaysRun: false,
-                    displayName: 'Archive $(Build.BinariesDirectory)',
-                    timeoutInMinutes: 0,
-                    condition: 'succeeded()',
-                    task: 
-                    { id: 'd8b84976-e99a-4b86-b885-4849694435b0',
-                    versionSpec: '2.*',
-                    definitionType: 'task' },
-                    inputs: 
-                    { rootFolderOrFile: '$(Build.BinariesDirectory)',
-                    includeRootFolder: 'true',
-                    archiveType: 'zip',
-                    tarCompression: 'gz',
-                    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip',
-                    replaceExistingArchive: 'true' } },
-                    { environment: {},
-                    enabled: true,
-                    continueOnError: false,
-                    alwaysRun: false,
-                    displayName: 'Archive $(Build.BinariesDirectory)',
-                    timeoutInMinutes: 0,
-                    condition: 'succeeded()',
-                    task: 
-                    { id: 'd8b84976-e99a-4b86-b885-4849694435b0',
-                    versionSpec: '2.*',
-                    definitionType: 'task' },
-                    inputs: 
-                    { rootFolderOrFile: '$(Build.BinariesDirectory)',
-                    includeRootFolder: 'true',
-                    archiveType: 'zip',
-                    tarCompression: 'gz',
-                    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip',
-                    replaceExistingArchive: 'true' } } ],
-                    name: 'Phase 1',
-                    condition: 'succeeded()',
-                    target: 
-                    { executionOptions: { type: 0 },
-                    allowScriptsAuthAccessOption: false,
-                    type: 1 },
-                    jobAuthorizationScope: 'projectCollection',
-                    jobCancelTimeoutInMinutes: 1 
-                } 
-            ],
-            type: 1 
+    function waitSec(t){
+        return (d)=>{
+            return new Promise((resolve, reject)=>{
+                setTimeout(()=>{
+                    resolve(d)
+                },t * 1000)
+            }) 
         }
+     
+    }
 
-        var queue =  {
+    vstsApi.createProject = (projectName) => {
+        return vstsApi._createProject(projectName)
+        .then(waitSec(35))
+        .then(()=>{
+            return vstsApi.getProjectByName(projectName)
+        })
+    }
+
+    vstsApi._createProject = (projectName) => {
+        return new Promise((resolve, reject)=>{
+
+            var options = { method: 'POST',
+                url: endPoint + '/_api/_project/CreateProject',
+                headers: {
+                    accept: 'application/json;api-version=4.0',
+                    'content-type': 'application/json',
+                    origin: endPoint
+                },
+                body: { 
+                    projectName: projectName,
+                    projectDescription: '',
+                    processTemplateTypeId: 'adcc42ab-9882-485e-a3ed-7678f01f66bc',
+                    //collectionId: 'ba47a542-7971-4401-8d4e-aaa5f04d9ec6',
+                    source: 'NewProjectCreation:',
+                    projectData: '{"VersionControlOption":"Git","ProjectVisibilityOption":null}' 
+                },
+                json: true 
+            };
+
+            request(options, function (error, response, body) {
+                console.log('created project ' + projectName)
+                if (error) reject( new Error(error))
+                else resolve(body)
+            }).auth('',token);
+        })
+    }
+
+    vstsApi.getProjectByName = (projectName) => {
+        return vstsApi.getObject('/_apis/projects/')
+        .then((projectData)=>{
+            return projectData.value.filter(p => p.name == projectName )[0]
+        })
+    }
+
+    // vstsApi.getProjectId = (projectName) => {
+    //     return vstsApi.getObject('/_apis/projects/')
+    //     .then((projectData)=>{
+    //         return projectData.value.filter( p => p.name == projectName )[0].id
+    //     })
+    // }
+
+    vstsApi.deleteProject = (projectId) => {
+        return new Promise((resolve, reject)=>{
+            var options = {
+                method: 'DELETE',
+                url: endPoint + '/_apis/projects/' + projectId,
+                headers: {
+                    'accept-language': 'en-US,en;q=0.9',
+                    accept: 'application/json;api-version=4.0',
+                    'content-type': 'application/json'
+                    // origin: endPoint
+                },
+                json: true
+             }                
+
+            request(options, function (error, response, body) {
+                if (error) reject( new Error(error))
+                else resolve(body)
+            }).auth('',token);
+
+        })
+    }
+
+    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinitionName)=>{
+
+        return Promise.all([
+            vstsApi.getObject('/_apis/projects/' + projectId),
+            vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues')
+        ])
+        .then((queryData)=>{
+            project = queryData[0];
+            projectQueues = queryData[1];
+
+            var queueId = projectQueues.value.filter(q => q.name == queueName)[0].id;
+            projectName = project.name;
+
+            return vstsApi._createBuildDefinition( projectId, projectName, queueId, queueName ,buildDefinitionName)
+        })
+    }
+
+    vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinitionName) => {
+        return new Promise((resolve, reject)=>{
+            var url = endPoint + '/' + projectId + '/_apis/build/Definitions';
+
+            var buildProcess = {
+                phases:[ 
+                    { 
+                        steps: 
+                        [ { environment: {},
+                        enabled: true,
+                        continueOnError: false,
+                        alwaysRun: false,
+                        displayName: 'Archive $(Build.BinariesDirectory)',
+                        timeoutInMinutes: 0,
+                        condition: 'succeeded()',
+                        task: 
+                        { id: 'd8b84976-e99a-4b86-b885-4849694435b0',
+                        versionSpec: '2.*',
+                        definitionType: 'task' },
+                        inputs: 
+                        { rootFolderOrFile: '$(Build.BinariesDirectory)',
+                        includeRootFolder: 'true',
+                        archiveType: 'zip',
+                        tarCompression: 'gz',
+                        archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip',
+                        replaceExistingArchive: 'true' } },
+                        { environment: {},
+                        enabled: true,
+                        continueOnError: false,
+                        alwaysRun: false,
+                        displayName: 'Archive $(Build.BinariesDirectory)',
+                        timeoutInMinutes: 0,
+                        condition: 'succeeded()',
+                        task: 
+                        { id: 'd8b84976-e99a-4b86-b885-4849694435b0',
+                        versionSpec: '2.*',
+                        definitionType: 'task' },
+                        inputs: 
+                        { rootFolderOrFile: '$(Build.BinariesDirectory)',
+                        includeRootFolder: 'true',
+                        archiveType: 'zip',
+                        tarCompression: 'gz',
+                        archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip',
+                        replaceExistingArchive: 'true' } } ],
+                        name: 'Phase 1',
+                        condition: 'succeeded()',
+                        target: 
+                        { executionOptions: { type: 0 },
+                        allowScriptsAuthAccessOption: false,
+                        type: 1 },
+                        jobAuthorizationScope: 'projectCollection',
+                        jobCancelTimeoutInMinutes: 1 
+                    } 
+                ],
+                type: 1 
+            }
+
+            var queue =  {
                 _links: {
                     self: {
-                        href: 'https://' + vstsAccount + '.visualstudio.com/_apis/build/Queues/' + queueId
+                        href: endPoint + '/_apis/build/Queues/' + queueId
                     }
                 },
                 id: queueId,
-                name: 'Hosted VS2017',
-                url: 'https://' + vstsAccount + '.visualstudio.com/_apis/build/Queues/' + queueId,
+                name: queueName,
+                url: endPoint + '/_apis/build/Queues/' + queueId,
                 pool: {
                     id: 4,
-                    name: 'Hosted VS2017',
+                    name: queueName,
                     isHosted: true
                 }
             }
 
-            debugger;
-
-        var body = {
-            options: [{
-                enabled: false,
-                definition: {
-                    id: '5d58cc01-7c75-450c-be18-a388ddb129ec'
+            var body = {
+                options: [{
+                    enabled: false,
+                    definition: {
+                        id: '5d58cc01-7c75-450c-be18-a388ddb129ec'
+                    },
+                    inputs: {
+                        branchFilters: '["+refs/heads/*"]',
+                        additionalFields: '{}'
+                    }
+                }, {
+                    enabled: false,
+                    definition: {
+                        id: 'a9db38f9-9fdc-478c-b0f9-464221e58316'
+                    },
+                    inputs: {
+                        workItemType: '1844284',
+                        assignToRequestor: 'true',
+                        additionalFields: '{}'
+                    }
+                }, {
+                    enabled: false,
+                    definition: {
+                        id: '57578776-4c22-4526-aeb0-86b6da17ee9c'
+                    },
+                    inputs: {}
+                }],
+                variables: {
+                    'system.debug': {
+                        value: 'false',
+                        allowOverride: true
+                    }
                 },
-                inputs: {
-                    branchFilters: '["+refs/heads/*"]',
-                    additionalFields: '{}'
-                }
-            }, {
-                enabled: false,
-                definition: {
-                    id: 'a9db38f9-9fdc-478c-b0f9-464221e58316'
-                },
-                inputs: {
-                    workItemType: '1844284',
-                    assignToRequestor: 'true',
-                    additionalFields: '{}'
-                }
-            }, {
-                enabled: false,
-                definition: {
-                    id: '57578776-4c22-4526-aeb0-86b6da17ee9c'
-                },
-                inputs: {}
-            }],
-            variables: {
-                'system.debug': {
-                    value: 'false',
-                    allowOverride: true
-                }
-            },
-            retentionRules: [{
-                branches: ['+refs/heads/*'],
-                artifacts: [],
-                artifactTypesToDelete: ['FilePath', 'SymbolStore'],
-                daysToKeep: 10,
-                minimumToKeep: 1,
-                deleteBuildRecord: true,
-                deleteTestResults: true
-            }],
-            properties: {
-                source: {
-                    '$type': 'System.String',
-                    '$value': 'projecthome'
-                }
-            },
-            tags: [],
-            jobAuthorizationScope: 'projectCollection',
-            jobTimeoutInMinutes: 60,
-            jobCancelTimeoutInMinutes: 5,
-            process: buildProcess,
-            repository: {
+                retentionRules: [{
+                    branches: ['+refs/heads/*'],
+                    artifacts: [],
+                    artifactTypesToDelete: ['FilePath', 'SymbolStore'],
+                    daysToKeep: 10,
+                    minimumToKeep: 1,
+                    deleteBuildRecord: true,
+                    deleteTestResults: true
+                }],
                 properties: {
-                    cleanOptions: '0',
-                    labelSources: '0',
-                    labelSourcesFormat: '$(build.buildNumber)',
-                    reportBuildStatus: 'true',
-                    gitLfsSupport: 'false',
-                    skipSyncSource: 'false',
-                    checkoutNestedSubmodules: 'false',
-                    fetchDepth: '0'
+                    source: {
+                        '$type': 'System.String',
+                        '$value': 'projecthome'
+                    }
                 },
-                id: '38966012-3a8a-4377-9da4-89cf0116d369',
-                type: 'TfsGit',
-                name: '' + buildDefinitionName + '',
-                url: 'https://' + vstsAccount + '.visualstudio.com/_git/' + buildDefinitionName + '',
-                defaultBranch: 'refs/heads/master',
-                clean: 'false',
-                checkoutSubmodules: false
-            },
-            processParameters: {},
-            quality: 'definition',
-            drafts: [],
-            queue: queue,
-            id: 6,
-            name: '' + buildDefinitionName + '-CI',
-            url: url,
-            path: '\\',
-            type: 'build',
-            queueStatus: 'enabled'
-        }
+                tags: [],
+                jobAuthorizationScope: 'projectCollection',
+                jobTimeoutInMinutes: 60,
+                jobCancelTimeoutInMinutes: 5,
+                process: buildProcess,
+                repository: {
+                    properties: {
+                        cleanOptions: '0',
+                        labelSources: '0',
+                        labelSourcesFormat: '$(build.buildNumber)',
+                        reportBuildStatus: 'true',
+                        gitLfsSupport: 'false',
+                        skipSyncSource: 'false',
+                        checkoutNestedSubmodules: 'false',
+                        fetchDepth: '0'
+                    },
+                    id: '38966012-3a8a-4377-9da4-89cf0116d369',
+                    type: 'TfsGit',
+                    name: projectName,
+                    url: endPoint + '/_git/' + projectName ,
+                    defaultBranch: 'refs/heads/master',
+                    clean: 'false',
+                    checkoutSubmodules: false
+                },
+                processParameters: {},
+                quality: 'definition',
+                drafts: [],
+                queue: queue,
+                id: 6,
+                name: '' + projectName + '-CI',
+                url: url,
+                path: '\\',
+                type: 'build',
+                queueStatus: 'enabled'
+            }
 
 
-        var options = {
-            method: 'POST',
-            url: 'https://' + vstsAccount + '.visualstudio.com/' + projectId + '/_apis/build/definitions',
-            headers: {
-                'accept-language': 'en-US,en;q=0.9',
-                accept: 'application/json;api-version=4.1-preview.6;excludeUrls=true',
-                'content-type': 'application/json',
-                origin: 'https://' + vstsAccount + '.visualstudio.com'
-            },
-            body: body,
-            json: true
-         }
+            var options = {
+                method: 'POST',
+                url: endPoint + '/' + projectId + '/_apis/build/definitions',
+                headers: {
+                    'accept-language': 'en-US,en;q=0.9',
+                    accept: 'application/json;api-version=4.0',
+                    'content-type': 'application/json',
+                    origin: endPoint
+                },
+                body: body,
+                json: true
+             }                
 
-                        
+            request(options, function (error, response, body) {
+                if (error) reject( new Error(error))
+                else resolve(body)
+            }).auth('',token);
 
-        request(options, function (error, response, body) {
-            if (error) reject( new Error(error))
-            else resolve(body)
-        }).auth('',token);
-
-    })
-
-}
-
-
-var vstsAccount = 'al-opsrobot-1'
-var projectName = 'George_project_' +  Date.now()
-var projectId = 'd2506f04-0ed2-48d9-afaa-0d9b32c27812';
-var buildDefinitionName = 'builddef-' +  Date.now()
-
-var spit = (t)=>{
-    return (d)=>{
-        console.log(t)     
-        return d
+        })
     }
+
+    return vstsApi
 }
-
-
-vstsApi.getProjectId = (vstsAccount,projectName) => {
-    return vstsApi.getObject('https://'+ vstsAccount +'.visualstudio.com/_apis/projects/')
-    .then((projectData)=>{
-
-        return projectData.value.filter( p => p.name == projectName )[0].id
-    })
-}
-
-function waitSec(t){
-    return (d)=>{
-        return new Promise((resolve, reject)=>{
-            setTimeout(()=>{
-                resolve(d)
-            },t * 1000)
-        }) 
-    }
- 
-}
-
-
-var token = process.env.VSTS_PAT;
-
-vstsApi.createProject (projectName)
-.then(waitSec(25))
-.then(()=>{
-    return vstsApi.getProjectId(vstsAccount,projectName)
-})
-.then((projectId)=>{
-
-    var url = 'https://'+vstsAccount+'.visualstudio.com/DefaultCollection/'+projectId+'/_apis/distributedtask/queues'
-    return vstsApi.getObject(url)
-    .then((projectQueues)=>{
-        debugger;
-        var queueId = projectQueues.value.filter(q => q.name == 'Hosted VS2017')[0].id
-        
-        return vstsApi.createBuildDefinition( vstsAccount, projectId ,queueId, buildDefinitionName)
-    })
-
-})
-//vstsApi.createBuildDefinition( vstsAccount, projectId , buildDefinitionName)
-//vstsApi.getObject('https://al-opsrobot-1.visualstudio.com/_apis/projects/')
-//vstsApi.getProjectId(vstsAccount,'george_project_5')
-.then(console.log)
-//.then(spit(buildDefinitionName))
-.catch(console.error)

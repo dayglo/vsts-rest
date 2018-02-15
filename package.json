@@ -6,7 +6,9 @@
   "dependencies": {
     "request": "^2.83.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "njstrace": "0.0.2"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
