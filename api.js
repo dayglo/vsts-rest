@@ -235,7 +235,7 @@ module.exports = function(vstsAccount, token) {
 
     vstsApi.createProject = (projectName) => {
         return vstsApi._createProject(projectName)
-        .then(waitSec(35))
+        .then(waitSec(45))
         .then(()=>{
             return vstsApi.getProjectByName(projectName)
         })

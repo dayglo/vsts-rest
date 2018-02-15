@@ -4,7 +4,8 @@
   "description": "",
   "main": "api.js",
   "dependencies": {
-    "request": "^2.83.0"
+    "request": "^2.83.0",
+    "simple-git": "^1.89.0"
   },
   "devDependencies": {
     "njstrace": "0.0.2"

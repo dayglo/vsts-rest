@@ -1,4 +1,4 @@
-const VstsApi = require('./api.js')  
+const VstsApi = require('./api.js');
 
 var vstsAccount = 'al-opsrobot-1'
 var projectName = 'George_project_' +  Date.now()
@@ -7,6 +7,14 @@ var buildDefinitionName = 'builddef-' +  Date.now()
 var queueName = 'Hosted VS2017'
 
 var releaseDefinitionName = 'releasedef-' +  Date.now()
+
+
+
+
+const gitRepo = require('simple-git')('./tests/repos/simpleweb');
+gitRepo.addRemote(projectName, 'https://'+ vstsAccount +'.visualstudio.com/_git/' +projectName)
+
+
 
 var spit = (t)=>{
     return (d)=>{
@@ -38,6 +46,9 @@ vstsApi.createProject(projectName)
 })
 .then((buildDef)=>{
     return vstsApi.createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDef.name, buildDef.id, queueName) 
+})
+.then(()=>{
+    gitRepo.push(projectName,'master')
 })
 
 .then(console.log)
