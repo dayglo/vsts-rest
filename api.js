@@ -270,6 +270,35 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
+    vstsApi.startBuild = (projectId, buildId) => {
+        return new Promise((resolve, reject)=>{
+            var body = {
+                "definition": {
+                    "id": buildId
+                },
+                "sourceBranch": "refs/heads/master",
+                "parameters": "{\"system.debug\":\"true\",\"BuildConfiguration\":\"debug\",\"BuildPlatform\":\"x64\"}"
+            }
+
+            var options = { method: 'POST',
+                url: endPoint + '/DefaultCollection/' + projectId + '/_apis/build/builds',
+                headers: {
+                    accept: 'application/json;api-version=4.0-preview',
+                    'content-type': 'application/json',
+                    origin: endPoint
+                },
+                body: body,
+                json: true 
+            };
+
+            request(options, function (error, response, body) {
+                if (error) reject( new Error(error))
+                else resolve(body)
+            }).auth('',token);
+        })
+
+    }
+
     vstsApi.getProjectByName = (projectName) => {
         return vstsApi.getObject('/_apis/projects/')
         .then((projectData)=>{

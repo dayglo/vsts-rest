@@ -34,10 +34,20 @@ function waitSec(t){
  
 }
 
+function push(repo){
+    return new Promise((resolve, reject)=>{
+        gitRepo.push(projectName,'master',(error,result)=>{
+            if (error) reject( new Error(error))
+            else resolve(result)
+        })
+    })
+}
+
 var token = process.env.VSTS_PAT;
 var vstsApi = new VstsApi(vstsAccount,token);
 
 var projectId = ""
+var buildDefId = ""
 
 vstsApi.createProject(projectName)
 .then((project)=>{
@@ -45,10 +55,14 @@ vstsApi.createProject(projectName)
     return vstsApi.createBuildDefinition(projectId , queueName, buildDefinitionName)
 })
 .then((buildDef)=>{
-    return vstsApi.createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDef.name, buildDef.id, queueName) 
+    buildDefId = buildDef.id
+    return vstsApi.createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefId, queueName) 
 })
 .then(()=>{
-    gitRepo.push(projectName,'master')
+    return push(projectName) 
+})
+.then((buildDef)=>{
+    return vstsApi.startBuild(projectId, buildDefId)
 })
 
 .then(console.log)
