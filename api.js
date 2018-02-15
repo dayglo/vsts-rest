@@ -29,7 +29,6 @@ vstsApi.createProject = (projectName) => {
         var options = { method: 'POST',
             url: 'https://' + vstsAccount + '.visualstudio.com/_api/_project/CreateProject',
             headers: {
-                'accept-language': 'en-US,en;q=0.9',
                 accept: 'application/json;api-version=4.1-preview.6;excludeUrls=true',
                 'content-type': 'application/json',
                 origin: 'https://' + vstsAccount + '.visualstudio.com'
@@ -54,7 +53,7 @@ vstsApi.createProject = (projectName) => {
 
 
 
-vstsApi.createBuildDefinition = (vstsAccount,projectId,buildDefinitionName) => {
+vstsApi.createBuildDefinition = (vstsAccount,projectId,queueId, buildDefinitionName) => {
     return new Promise((resolve, reject)=>{
         var url = 'https://' + vstsAccount + '.visualstudio.com/' + projectId + '/_apis/build/Definitions';
 
@@ -110,6 +109,24 @@ vstsApi.createBuildDefinition = (vstsAccount,projectId,buildDefinitionName) => {
             ],
             type: 1 
         }
+
+        var queue =  {
+                _links: {
+                    self: {
+                        href: 'https://' + vstsAccount + '.visualstudio.com/_apis/build/Queues/' + queueId
+                    }
+                },
+                id: queueId,
+                name: 'Hosted VS2017',
+                url: 'https://' + vstsAccount + '.visualstudio.com/_apis/build/Queues/' + queueId,
+                pool: {
+                    id: 4,
+                    name: 'Hosted VS2017',
+                    isHosted: true
+                }
+            }
+
+            debugger;
 
         var body = {
             options: [{
@@ -186,21 +203,7 @@ vstsApi.createBuildDefinition = (vstsAccount,projectId,buildDefinitionName) => {
             processParameters: {},
             quality: 'definition',
             drafts: [],
-            queue: {
-                _links: {
-                    self: {
-                        href: 'https://' + vstsAccount + '.visualstudio.com/_apis/build/Queues/34'
-                    }
-                },
-                id: 34,
-                name: 'Hosted VS2017',
-                url: 'https://' + vstsAccount + '.visualstudio.com/_apis/build/Queues/34',
-                pool: {
-                    id: 4,
-                    name: 'Hosted VS2017',
-                    isHosted: true
-                }
-            },
+            queue: queue,
             id: 6,
             name: '' + buildDefinitionName + '-CI',
             url: url,
@@ -236,6 +239,7 @@ vstsApi.createBuildDefinition = (vstsAccount,projectId,buildDefinitionName) => {
 
 
 var vstsAccount = 'al-opsrobot-1'
+var projectName = 'George_project_' +  Date.now()
 var projectId = 'd2506f04-0ed2-48d9-afaa-0d9b32c27812';
 var buildDefinitionName = 'builddef-' +  Date.now()
 
@@ -246,21 +250,49 @@ var spit = (t)=>{
     }
 }
 
+
 vstsApi.getProjectId = (vstsAccount,projectName) => {
     return vstsApi.getObject('https://'+ vstsAccount +'.visualstudio.com/_apis/projects/')
     .then((projectData)=>{
-        debugger;
+
         return projectData.value.filter( p => p.name == projectName )[0].id
     })
 }
 
+function waitSec(t){
+    return (d)=>{
+        return new Promise((resolve, reject)=>{
+            setTimeout(()=>{
+                resolve(d)
+            },t * 1000)
+        }) 
+    }
+ 
+}
 
 
 var token = process.env.VSTS_PAT;
 
+vstsApi.createProject (projectName)
+.then(waitSec(25))
+.then(()=>{
+    return vstsApi.getProjectId(vstsAccount,projectName)
+})
+.then((projectId)=>{
+
+    var url = 'https://'+vstsAccount+'.visualstudio.com/DefaultCollection/'+projectId+'/_apis/distributedtask/queues'
+    return vstsApi.getObject(url)
+    .then((projectQueues)=>{
+        debugger;
+        var queueId = projectQueues.value.filter(q => q.name == 'Hosted VS2017')[0].id
+        
+        return vstsApi.createBuildDefinition( vstsAccount, projectId ,queueId, buildDefinitionName)
+    })
+
+})
 //vstsApi.createBuildDefinition( vstsAccount, projectId , buildDefinitionName)
 //vstsApi.getObject('https://al-opsrobot-1.visualstudio.com/_apis/projects/')
-vstsApi.getProjectId(vstsAccount,'george_project_5')
+//vstsApi.getProjectId(vstsAccount,'george_project_5')
 .then(console.log)
 //.then(spit(buildDefinitionName))
 .catch(console.error)
