@@ -6,6 +6,8 @@ var projectName = 'George_project_' +  Date.now()
 var buildDefinitionName = 'builddef-' +  Date.now()
 var queueName = 'Hosted VS2017'
 
+var releaseDefinitionName = 'releasedef-' +  Date.now()
+
 var spit = (t)=>{
     return (d)=>{
         console.log(t)     
@@ -27,11 +29,21 @@ function waitSec(t){
 var token = process.env.VSTS_PAT;
 var vstsApi = new VstsApi(vstsAccount,token);
 
+var projectId = ""
 
 vstsApi.createProject(projectName)
 .then((project)=>{
-    return vstsApi.createBuildDefinition(project.id , queueName, buildDefinitionName)
+    projectId = project.id;
+    return vstsApi.createBuildDefinition(projectId , queueName, buildDefinitionName)
+})
+.then((buildDef)=>{
+    return vstsApi.createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDef.name, buildDef.id, queueName) 
 })
 
 .then(console.log)
 .catch(console.error)
+
+
+//needs to upload simpleweb repo
+// trigger build
+// trigger release

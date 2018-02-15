@@ -4,7 +4,8 @@ module.exports = function(vstsAccount, token) {
 
     var vstsApi = {}
 
-    var endPoint = 'https://'+ vstsAccount +'.visualstudio.com'
+    var endPoint   = 'https://'+ vstsAccount +'.visualstudio.com'
+    var rmEndPoint = 'https://'+ vstsAccount +'.vsrm.visualstudio.com'
 
     vstsApi.getObject = (url) => {
         return new Promise((resolve, reject)=>{
@@ -33,7 +34,203 @@ module.exports = function(vstsAccount, token) {
                 },t * 1000)
             }) 
         }
-     
+    }
+
+    vstsApi.createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueName) => {
+        return Promise.all([
+            vstsApi.getObject('/_apis/projects/' + projectId),
+            vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues')
+        ])
+        .then((queryData)=>{
+            project = queryData[0];
+            projectQueues = queryData[1];
+
+            var queueId = projectQueues.value.filter(q => q.name == queueName)[0].id;
+            projectName = project.name;
+
+            return vstsApi._createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId,queueId)
+        })
+    }
+
+    vstsApi._createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId) => {
+        return new Promise((resolve,reject)=>{   
+            var rmObj = {
+                "id": 0,
+                "name": releaseDefinitionName,
+                "source": 2,
+                "comment": "",
+                "createdOn": "2018-02-15T16:57:54.742Z",
+                "createdBy": null,
+                "modifiedBy": null,
+                "modifiedOn": "2018-02-15T16:57:54.742Z",
+                "environments": [
+                    {
+                        "id": -1,
+                        "name": "Environment 1",
+                        "rank": 1,
+                        "variables": {},
+                        "variableGroups": [],
+                        "preDeployApprovals": {
+                            "approvals": [
+                                {
+                                    "rank": 1,
+                                    "isAutomated": true,
+                                    "isNotificationOn": false,
+                                    "id": 0
+                                }
+                            ]
+                        },
+                        "deployStep": {
+                            "tasks": [],
+                            "id": 0
+                        },
+                        "postDeployApprovals": {
+                            "approvals": [
+                                {
+                                    "rank": 1,
+                                    "isAutomated": true,
+                                    "isNotificationOn": false,
+                                    "id": 0
+                                }
+                            ]
+                        },
+                        "deployPhases": [
+                            {
+                                "deploymentInput": {
+                                    "parallelExecution": {
+                                        "parallelExecutionType": "none"
+                                    },
+                                    "skipArtifactsDownload": false,
+                                    "artifactsDownloadInput": {},
+                                    "queueId": queueId,
+                                    "demands": [],
+                                    "enableAccessToken": false,
+                                    "timeoutInMinutes": 0,
+                                    "jobCancelTimeoutInMinutes": 1,
+                                    "condition": "succeeded()",
+                                    "overrideInputs": {}
+                                },
+                                "rank": 1,
+                                "phaseType": 1,
+                                "name": "Agent phase",
+                                "workflowTasks": [],
+                                "tasks": []
+                            }
+                        ],
+                        "runOptions": {},
+                        "environmentOptions": {
+                            "emailNotificationType": "OnlyOnFailure",
+                            "emailRecipients": "release.environment.owner;release.creator",
+                            "skipArtifactsDownload": false,
+                            "timeoutInMinutes": 0,
+                            "enableAccessToken": false,
+                            "publishDeploymentStatus": true,
+                            "autoLinkWorkItems": false
+                        },
+                        "demands": [],
+                        "conditions": [
+                            {
+                                "conditionType": 1,
+                                "name": "ReleaseStarted",
+                                "value": ""
+                            }
+                        ],
+                        "executionPolicy": {
+                            "queueDepthCount": 0,
+                            "concurrencyCount": 0
+                        },
+                        "schedules": [],
+                        "properties": {},
+                        "preDeploymentGates": {
+                            "id": 0,
+                            "gatesOptions": null,
+                            "gates": []
+                        },
+                        "postDeploymentGates": {
+                            "id": 0,
+                            "gatesOptions": null,
+                            "gates": []
+                        },
+                        "owner": {
+                            "displayName": "George Cairns",
+                            "id": "bbb8585f-0e50-4a81-884c-8bcce0330c36",
+                            "isContainer": false,
+                            "uniqueName": "george@opsrobot.co.uk",
+                            "url": "https://al-opsrobot-1.visualstudio.com/"
+                        },
+                        "retentionPolicy": {
+                            "daysToKeep": 30,
+                            "releasesToKeep": 3,
+                            "retainBuild": true
+                        },
+                        "processParameters": {}
+                    }
+                ],
+                "artifacts": [
+                    {
+                        "type": "Build",
+                        "definitionReference": {
+                            "project": {
+                                "name": projectName,
+                                "id":   projectId
+                            },
+                            "definition": {
+                                "name": buildDefinitionName,
+                                "id": buildDefinitionId
+                            },
+                            "defaultVersionType": {
+                                "name": "Latest",
+                                "id": "latestType"
+                            },
+                            "defaultVersionBranch": {
+                                "name": "",
+                                "id": ""
+                            },
+                            "defaultVersionTags": {
+                                "name": "",
+                                "id": ""
+                            },
+                            "defaultVersionSpecific": {
+                                "name": "",
+                                "id": ""
+                            }
+                        },
+                        "alias": buildDefinitionName,
+                        "isPrimary": true,
+                        "sourceId": ""
+                    }
+                ],
+                "variables": {},
+                "variableGroups": [],
+                "triggers": [],
+                "lastRelease": null,
+                "tags": [],
+                "path": "\\",
+                "properties": {
+                    "DefinitionCreationSource": "ReleaseNew"
+                },
+                "releaseNameFormat": "Release-$(rev:r)",
+                "description": ""
+            }
+
+             var options = { method: 'POST',
+                url: rmEndPoint + '/'+ projectId +'/_apis/Release/definitions',
+                headers: {
+                    accept: 'application/json;api-version=4.0-preview',
+                    'content-type': 'application/json',
+                    origin: endPoint
+                },
+                body: rmObj,
+                json: true 
+            };
+
+
+            request(options, function (error, response, body) {
+                if (error) reject( new Error(error))
+                else resolve(body)
+            }).auth('',token);
+        })
+
     }
 
     vstsApi.createProject = (projectName) => {
@@ -50,7 +247,7 @@ module.exports = function(vstsAccount, token) {
             var options = { method: 'POST',
                 url: endPoint + '/_api/_project/CreateProject',
                 headers: {
-                    accept: 'application/json;api-version=4.0',
+                    accept: 'application/json;api-version=4.0-preview',
                     'content-type': 'application/json',
                     origin: endPoint
                 },
@@ -94,7 +291,7 @@ module.exports = function(vstsAccount, token) {
                 url: endPoint + '/_apis/projects/' + projectId,
                 headers: {
                     'accept-language': 'en-US,en;q=0.9',
-                    accept: 'application/json;api-version=4.0',
+                    accept: 'application/json;api-version=4.0-preview',
                     'content-type': 'application/json'
                     // origin: endPoint
                 },
@@ -289,7 +486,7 @@ module.exports = function(vstsAccount, token) {
                 url: endPoint + '/' + projectId + '/_apis/build/definitions',
                 headers: {
                     'accept-language': 'en-US,en;q=0.9',
-                    accept: 'application/json;api-version=4.0',
+                    accept: 'application/json;api-version=4.0-preview',
                     'content-type': 'application/json',
                     origin: endPoint
                 },
