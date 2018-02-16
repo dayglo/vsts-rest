@@ -1,12 +1,14 @@
 const VstsApi = require('./api.js');
 
-var vstsAccount = 'al-opsrobot-1'
-var projectName = 'George_project_' +  Date.now()
-// var projectId = 'd2506f04-0ed2-48d9-afaa-0d9b32c27812';
-var buildDefinitionName = 'builddef-' +  Date.now()
+var vstsAccount = 'al-opsrobot-2'
+
+var timestamp = Date.now()
+
+var projectName = 'George_project_' + timestamp
+var buildDefinitionName = 'builddef-' + timestamp
 var queueName = 'Hosted VS2017'
 
-var releaseDefinitionName = 'releasedef-' +  Date.now()
+var releaseDefinitionName = 'releasedef-' + timestamp
 
 
 

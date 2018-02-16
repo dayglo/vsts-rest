@@ -36,7 +36,9 @@ module.exports = function(vstsAccount, token) {
         }
     }
 
-    vstsApi.createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueName) => {
+
+    vstsApi.createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseEnvironments) => { 
+
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
             vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues')
@@ -48,12 +50,117 @@ module.exports = function(vstsAccount, token) {
             var queueId = projectQueues.value.filter(q => q.name == queueName)[0].id;
             projectName = project.name;
 
-            return vstsApi._createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId,queueId)
+            return vstsApi._createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments)
         })
     }
 
-    vstsApi._createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId) => {
-        return new Promise((resolve,reject)=>{   
+    vstsApi._createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments) => {
+        return new Promise((resolve,reject)=>{ 
+
+            var releaseEnvironments = [
+                {
+                    "id": -1,
+                    "name": "Environment 1",
+                    "rank": 1,
+                    "variables": {},
+                    "variableGroups": [],
+                    "preDeployApprovals": {
+                        "approvals": [
+                            {
+                                "rank": 1,
+                                "isAutomated": true,
+                                "isNotificationOn": false,
+                                "id": 0
+                            }
+                        ]
+                    },
+                    "deployStep": {
+                        "tasks": [],
+                        "id": 0
+                    },
+                    "postDeployApprovals": {
+                        "approvals": [
+                            {
+                                "rank": 1,
+                                "isAutomated": true,
+                                "isNotificationOn": false,
+                                "id": 0
+                            }
+                        ]
+                    },
+                    "deployPhases": [
+                        {
+                            "deploymentInput": {
+                                "parallelExecution": {
+                                    "parallelExecutionType": "none"
+                                },
+                                "skipArtifactsDownload": false,
+                                "artifactsDownloadInput": {},
+                                "queueId": queueId,
+                                "demands": [],
+                                "enableAccessToken": false,
+                                "timeoutInMinutes": 0,
+                                "jobCancelTimeoutInMinutes": 1,
+                                "condition": "succeeded()",
+                                "overrideInputs": {}
+                            },
+                            "rank": 1,
+                            "phaseType": 1,
+                            "name": "Agent phase",
+                            "workflowTasks": [],
+                            "tasks": []
+                        }
+                    ],
+                    "runOptions": {},
+                    "environmentOptions": {
+                        "emailNotificationType": "OnlyOnFailure",
+                        "emailRecipients": "release.environment.owner;release.creator",
+                        "skipArtifactsDownload": false,
+                        "timeoutInMinutes": 0,
+                        "enableAccessToken": false,
+                        "publishDeploymentStatus": true,
+                        "autoLinkWorkItems": false
+                    },
+                    "demands": [],
+                    "conditions": [
+                        {
+                            "conditionType": 1,
+                            "name": "ReleaseStarted",
+                            "value": ""
+                        }
+                    ],
+                    "executionPolicy": {
+                        "queueDepthCount": 0,
+                        "concurrencyCount": 0
+                    },
+                    "schedules": [],
+                    "properties": {},
+                    "preDeploymentGates": {
+                        "id": 0,
+                        "gatesOptions": null,
+                        "gates": []
+                    },
+                    "postDeploymentGates": {
+                        "id": 0,
+                        "gatesOptions": null,
+                        "gates": []
+                    },
+                    "owner": {
+                        "displayName": "George Cairns",
+                        "id": "bbb8585f-0e50-4a81-884c-8bcce0330c36",
+                        "isContainer": false,
+                        "uniqueName": "george@opsrobot.co.uk",
+                        "url": "https://al-opsrobot-1.visualstudio.com/"
+                    },
+                    "retentionPolicy": {
+                        "daysToKeep": 30,
+                        "releasesToKeep": 3,
+                        "retainBuild": true
+                    },
+                    "processParameters": {}
+                }
+            ]
+
             var rmObj = {
                 "id": 0,
                 "name": releaseDefinitionName,
@@ -63,109 +170,7 @@ module.exports = function(vstsAccount, token) {
                 "createdBy": null,
                 "modifiedBy": null,
                 "modifiedOn": "2018-02-15T16:57:54.742Z",
-                "environments": [
-                    {
-                        "id": -1,
-                        "name": "Environment 1",
-                        "rank": 1,
-                        "variables": {},
-                        "variableGroups": [],
-                        "preDeployApprovals": {
-                            "approvals": [
-                                {
-                                    "rank": 1,
-                                    "isAutomated": true,
-                                    "isNotificationOn": false,
-                                    "id": 0
-                                }
-                            ]
-                        },
-                        "deployStep": {
-                            "tasks": [],
-                            "id": 0
-                        },
-                        "postDeployApprovals": {
-                            "approvals": [
-                                {
-                                    "rank": 1,
-                                    "isAutomated": true,
-                                    "isNotificationOn": false,
-                                    "id": 0
-                                }
-                            ]
-                        },
-                        "deployPhases": [
-                            {
-                                "deploymentInput": {
-                                    "parallelExecution": {
-                                        "parallelExecutionType": "none"
-                                    },
-                                    "skipArtifactsDownload": false,
-                                    "artifactsDownloadInput": {},
-                                    "queueId": queueId,
-                                    "demands": [],
-                                    "enableAccessToken": false,
-                                    "timeoutInMinutes": 0,
-                                    "jobCancelTimeoutInMinutes": 1,
-                                    "condition": "succeeded()",
-                                    "overrideInputs": {}
-                                },
-                                "rank": 1,
-                                "phaseType": 1,
-                                "name": "Agent phase",
-                                "workflowTasks": [],
-                                "tasks": []
-                            }
-                        ],
-                        "runOptions": {},
-                        "environmentOptions": {
-                            "emailNotificationType": "OnlyOnFailure",
-                            "emailRecipients": "release.environment.owner;release.creator",
-                            "skipArtifactsDownload": false,
-                            "timeoutInMinutes": 0,
-                            "enableAccessToken": false,
-                            "publishDeploymentStatus": true,
-                            "autoLinkWorkItems": false
-                        },
-                        "demands": [],
-                        "conditions": [
-                            {
-                                "conditionType": 1,
-                                "name": "ReleaseStarted",
-                                "value": ""
-                            }
-                        ],
-                        "executionPolicy": {
-                            "queueDepthCount": 0,
-                            "concurrencyCount": 0
-                        },
-                        "schedules": [],
-                        "properties": {},
-                        "preDeploymentGates": {
-                            "id": 0,
-                            "gatesOptions": null,
-                            "gates": []
-                        },
-                        "postDeploymentGates": {
-                            "id": 0,
-                            "gatesOptions": null,
-                            "gates": []
-                        },
-                        "owner": {
-                            "displayName": "George Cairns",
-                            "id": "bbb8585f-0e50-4a81-884c-8bcce0330c36",
-                            "isContainer": false,
-                            "uniqueName": "george@opsrobot.co.uk",
-                            "url": "https://al-opsrobot-1.visualstudio.com/"
-                        },
-                        "retentionPolicy": {
-                            "daysToKeep": 30,
-                            "releasesToKeep": 3,
-                            "retainBuild": true
-                        },
-                        "processParameters": {}
-                    }
-                ],
+                "environments": releaseEnvironments,
                 "artifacts": [
                     {
                         "type": "Build",
@@ -193,7 +198,11 @@ module.exports = function(vstsAccount, token) {
                             "defaultVersionSpecific": {
                                 "name": "",
                                 "id": ""
-                            }
+                            },
+                            "artifactSourceDefinitionUrl": {
+                              "id": endPoint + "/_permalink/_build/index?projectId=" + projectId + "definitionId=" + buildDefinitionId,
+                              "name": ""
+                            },
                         },
                         "alias": buildDefinitionName,
                         "isPrimary": true,
@@ -263,7 +272,7 @@ module.exports = function(vstsAccount, token) {
             };
 
             request(options, function (error, response, body) {
-                console.log('created project ' + projectName)
+                console.log('creating project ' + projectName)
                 if (error) reject( new Error(error))
                 else resolve(body)
             }).auth('',token);
@@ -299,10 +308,20 @@ module.exports = function(vstsAccount, token) {
 
     }
 
+    vstsApi.getProject = (project) => {
+        return vstsApi.getObject('/_apis/projects/' + project)
+    }
+
     vstsApi.getProjectByName = (projectName) => {
-        return vstsApi.getObject('/_apis/projects/')
-        .then((projectData)=>{
-            return projectData.value.filter(p => p.name == projectName )[0]
+        return new Promise((resolve, reject)=>{
+            vstsApi.getObject('/_apis/projects/')
+            .then((projectData)=>{
+                var result = null
+                var project = projectData.value.filter(p => p.name == projectName )
+                if (project) result = project[0]
+                resolve(result)
+            })
+            .then(resolve,reject)
         })
     }
 
@@ -335,7 +354,74 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
-    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinitionName)=>{
+    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinitionName, buildProcess)=>{
+
+        if (!buildProcess) {
+            var buildProcess = {
+                "phases": [
+                    {
+                        "steps": [
+                            {
+                                "environment": {},
+                                "enabled": true,
+                                "continueOnError": false,
+                                "alwaysRun": false,
+                                "displayName": "Archive $(Build.BinariesDirectory)",
+                                "timeoutInMinutes": 0,
+                                "condition": "succeeded()",
+                                "task": {
+                                    "id": "d8b84976-e99a-4b86-b885-4849694435b0",
+                                    "versionSpec": "2.*",
+                                    "definitionType": "task"
+                                },
+                                "inputs": {
+                                    "rootFolderOrFile": "$(Build.BinariesDirectory)",
+                                    "includeRootFolder": "true",
+                                    "archiveType": "zip",
+                                    "tarCompression": "gz",
+                                    "archiveFile": "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip",
+                                    "replaceExistingArchive": "true"
+                                }
+                            },
+                            {
+                                "environment": {},
+                                "enabled": true,
+                                "continueOnError": false,
+                                "alwaysRun": false,
+                                "displayName": "Archive $(Build.BinariesDirectory)",
+                                "timeoutInMinutes": 0,
+                                "condition": "succeeded()",
+                                "task": {
+                                    "id": "d8b84976-e99a-4b86-b885-4849694435b0",
+                                    "versionSpec": "2.*",
+                                    "definitionType": "task"
+                                },
+                                "inputs": {
+                                    "rootFolderOrFile": "$(Build.BinariesDirectory)",
+                                    "includeRootFolder": "true",
+                                    "archiveType": "zip",
+                                    "tarCompression": "gz",
+                                    "archiveFile": "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip",
+                                    "replaceExistingArchive": "true"
+                                }
+                            }
+                        ],
+                        "name": "Phase 1",
+                        "condition": "succeeded()",
+                        "target": {
+                            "executionOptions": {
+                                "type": 0
+                            },
+                            "allowScriptsAuthAccessOption": false,
+                            "type": 1
+                        },
+                        "jobAuthorizationScope": "projectCollection",
+                        "jobCancelTimeoutInMinutes": 1
+                    }
+                ],
+                "type": 1
+            }
+        }
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
@@ -348,66 +434,13 @@ module.exports = function(vstsAccount, token) {
             var queueId = projectQueues.value.filter(q => q.name == queueName)[0].id;
             projectName = project.name;
 
-            return vstsApi._createBuildDefinition( projectId, projectName, queueId, queueName ,buildDefinitionName)
+            return vstsApi._createBuildDefinition( projectId, projectName, queueId, queueName ,buildDefinitionName, buildProcess)
         })
     }
 
-    vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinitionName) => {
+    vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinitionName, buildProcess) => {
         return new Promise((resolve, reject)=>{
             var url = endPoint + '/' + projectId + '/_apis/build/Definitions';
-
-            var buildProcess = {
-                phases:[ 
-                    { 
-                        steps: 
-                        [ { environment: {},
-                        enabled: true,
-                        continueOnError: false,
-                        alwaysRun: false,
-                        displayName: 'Archive $(Build.BinariesDirectory)',
-                        timeoutInMinutes: 0,
-                        condition: 'succeeded()',
-                        task: 
-                        { id: 'd8b84976-e99a-4b86-b885-4849694435b0',
-                        versionSpec: '2.*',
-                        definitionType: 'task' },
-                        inputs: 
-                        { rootFolderOrFile: '$(Build.BinariesDirectory)',
-                        includeRootFolder: 'true',
-                        archiveType: 'zip',
-                        tarCompression: 'gz',
-                        archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip',
-                        replaceExistingArchive: 'true' } },
-                        { environment: {},
-                        enabled: true,
-                        continueOnError: false,
-                        alwaysRun: false,
-                        displayName: 'Archive $(Build.BinariesDirectory)',
-                        timeoutInMinutes: 0,
-                        condition: 'succeeded()',
-                        task: 
-                        { id: 'd8b84976-e99a-4b86-b885-4849694435b0',
-                        versionSpec: '2.*',
-                        definitionType: 'task' },
-                        inputs: 
-                        { rootFolderOrFile: '$(Build.BinariesDirectory)',
-                        includeRootFolder: 'true',
-                        archiveType: 'zip',
-                        tarCompression: 'gz',
-                        archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip',
-                        replaceExistingArchive: 'true' } } ],
-                        name: 'Phase 1',
-                        condition: 'succeeded()',
-                        target: 
-                        { executionOptions: { type: 0 },
-                        allowScriptsAuthAccessOption: false,
-                        type: 1 },
-                        jobAuthorizationScope: 'projectCollection',
-                        jobCancelTimeoutInMinutes: 1 
-                    } 
-                ],
-                type: 1 
-            }
 
             var queue =  {
                 _links: {
