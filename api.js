@@ -41,20 +41,41 @@ module.exports = function(vstsAccount, token) {
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
-            vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues')
+            vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues'),
+            vstsApi.getDefaultCollection()
         ])
         .then((queryData)=>{
             project = queryData[0];
             projectQueues = queryData[1];
+            defaultCollectionId = queryData[2].id;
 
             var queueId = projectQueues.value.filter(q => q.name == queueName)[0].id;
             projectName = project.name;
 
-            return vstsApi._createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments)
+            return vstsApi._createReleaseDefinition(defaultCollectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments)
         })
     }
 
-    vstsApi._createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments) => {
+    vstsApi.getDefaultCollection = () => {
+        return new Promise((resolve,reject)=>{ 
+            var options = { method: 'GET',
+                url: endPoint +  '/_apis/projectcollections',
+                headers: {
+                    accept: 'application/json',
+                    'content-type': 'application/json',
+                    origin: endPoint
+                },
+                json: true 
+            };
+
+            request(options, function (error, response, body) {
+                if (error) reject( new Error(error))
+                else resolve(body.value[0])
+            }).auth('',token);
+        })
+    }
+
+    vstsApi._createReleaseDefinition = (collectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments) => {
         return new Promise((resolve,reject)=>{ 
 
             var releaseEnvironments = [
@@ -172,6 +193,45 @@ module.exports = function(vstsAccount, token) {
                 "modifiedOn": "2018-02-15T16:57:54.742Z",
                 "environments": releaseEnvironments,
                 "artifacts": [
+
+
+// {
+//       "alias": "GeorgeTestProject-CI",
+//       "definitionReference": {
+//         "artifactSourceDefinitionUrl": {
+//           "id": "https://al-opsrobot-2.visualstudio.com/_permalink/_build/index?collectionId=6de18e65-7250-4d77-a0f5-937656f08a7e&projectId=8c8528f2-40e6-4dba-bf80-07ce61f71f0e&definitionId=3",
+//           "name": ""
+//         },
+//         "defaultVersionBranch": {
+//           "id": "",
+//           "name": ""
+//         },
+//         "defaultVersionSpecific": {
+//           "id": "",
+//           "name": ""
+//         },
+//         "defaultVersionTags": {
+//           "id": "",
+//           "name": ""
+//         },
+//         "defaultVersionType": {
+//           "id": "latestType",
+//           "name": "Latest"
+//         },
+//         "definition": {
+//           "id": "3",
+//           "name": "GeorgeTestProject-CI"
+//         },
+//         "project": {
+//           "id": "8c8528f2-40e6-4dba-bf80-07ce61f71f0e",
+//           "name": "GeorgeTestProject"
+//         }
+//       },
+//       "isPrimary": true,
+//       "sourceId": "8c8528f2-40e6-4dba-bf80-07ce61f71f0e:3",
+//       "type": "Build"
+//     }
+
                     {
                         "type": "Build",
                         "definitionReference": {
@@ -200,13 +260,13 @@ module.exports = function(vstsAccount, token) {
                                 "id": ""
                             },
                             "artifactSourceDefinitionUrl": {
-                              "id": endPoint + "/_permalink/_build/index?projectId=" + projectId + "definitionId=" + buildDefinitionId,
+                              "id": endPoint + "/_permalink/_build/index?collectionId="+ collectionId +"&projectId=" + projectId + "definitionId=" + buildDefinitionId,
                               "name": ""
                             },
                         },
                         "alias": buildDefinitionName,
                         "isPrimary": true,
-                        "sourceId": ""
+                        "sourceId": projectId + ':3'
                     }
                 ],
                 "variables": {},
@@ -535,7 +595,7 @@ module.exports = function(vstsAccount, token) {
                 drafts: [],
                 queue: queue,
                 id: 6,
-                name: '' + projectName + '-CI',
+                name: '' + buildDefinitionName,
                 url: url,
                 path: '\\',
                 type: 'build',

@@ -1,0 +1,254 @@
+[
+    {
+      "conditions": [
+        {
+          "conditionType": 1,
+          "name": "ReleaseStarted",
+          "value": ""
+        }
+      ],
+      "demands": [],
+      "deployPhases": [
+        {
+          "deploymentInput": {
+            "artifactsDownloadInput": {
+              "downloadInputs": []
+            },
+            "condition": "succeeded()",
+            "demands": [],
+            "enableAccessToken": false,
+            "jobCancelTimeoutInMinutes": 1,
+            "overrideInputs": {},
+            "parallelExecution": {
+              "parallelExecutionType": "none"
+            },
+            "queueId": 180,
+            "skipArtifactsDownload": false,
+            "timeoutInMinutes": 0
+          },
+          "name": "Agent phase",
+          "phaseType": 1,
+          "rank": 1,
+          "workflowTasks": [
+            {
+              "alwaysRun": false,
+              "condition": "succeeded()",
+              "continueOnError": false,
+              "definitionType": "task",
+              "enabled": true,
+              "inputs": {
+                "ConnectedServiceName": "7bd66006-2af3-4d76-afda-65f05e6bcc46",
+                "action": "Create Or Update Resource Group",
+                "copyAzureVMTags": "true",
+                "csmFile": "https://bitbucket.org/automationlogic/azure-catalog/raw/695ead0e99ec94001d446c4b538a02dd7263274d/storage.json",
+                "csmFileLink": "https://bitbucket.org/automationlogic/azure-catalog/raw/3ca0964b3c39aeab8de06cb0739270bd2ac68ed3/storage.json",
+                "csmParametersFile": "$(System.DefaultWorkingDirectory)/AzureCatalog/vstsIntegration/parametersStorage.json",
+                "csmParametersFileLink": "https://bitbucket.org/automationlogic/azure-catalog/raw/3ca0964b3c39aeab8de06cb0739270bd2ac68ed3/parameters.storage.json",
+                "deploymentGroupEndpoint": "",
+                "deploymentGroupName": "",
+                "deploymentMode": "Incremental",
+                "deploymentOutputs": "",
+                "enableDeploymentPrerequisites": "None",
+                "location": "$(location)",
+                "outputVariable": "",
+                "overrideParameters": "-location \"$(location)\" -storageAccountApplication \"$(applicationName)stra\" -storageAccountType \"Standard_LRS\"",
+                "project": "",
+                "resourceGroupName": "$(resourceGroup)",
+                "templateLocation": "URL of the file"
+              },
+              "name": "Create Storage Account",
+              "overrideInputs": {},
+              "refName": "Task1",
+              "taskId": "94a74903-f93f-4075-884f-dc11f34058b4",
+              "timeoutInMinutes": 0,
+              "version": "2.*"
+            },
+            {
+              "alwaysRun": false,
+              "condition": "succeeded()",
+              "continueOnError": false,
+              "definitionType": "task",
+              "enabled": true,
+              "inputs": {
+                "args": "$(resourceGroup)",
+                "connectedServiceNameARM": "7bd66006-2af3-4d76-afda-65f05e6bcc46",
+                "cwd": "",
+                "failOnStandardError": "true",
+                "inlineScript": "ACCOUNT_KEY=$(az storage account keys list --resource-group $(resourceGroup) --account-name $(applicationName)stra | jq '.[] | .value' | head -1)\n\naz storage container create --account-name $(applicationName)stra --account-key $ACCOUNT_KEY --name $(applicationName)cont\n\naz storage container set-permission --account-name $(applicationName)stra --name $(applicationName)cont --account-key $ACCOUNT_KEY --public-access blob",
+                "scriptLocation": "inlineScript",
+                "scriptPath": ""
+              },
+              "name": "Create Container",
+              "overrideInputs": {},
+              "refName": "Task2",
+              "taskId": "46e4be58-730b-4389-8a2f-ea10b3e5e815",
+              "timeoutInMinutes": 0,
+              "version": "1.*"
+            },
+            {
+              "alwaysRun": false,
+              "condition": "succeeded()",
+              "continueOnError": true,
+              "definitionType": "task",
+              "enabled": true,
+              "inputs": {
+                "args": "",
+                "connectedServiceNameARM": "7bd66006-2af3-4d76-afda-65f05e6bcc46",
+                "cwd": "$(System.DefaultWorkingDirectory)/DemoApplication-CI",
+                "failOnStandardError": "true",
+                "inlineScript": "ACCOUNT_KEY=$(az storage account keys list --resource-group $(resourceGroup) --account-name $(applicationName)stra | jq '.[] | .value' | head -1)\n\naz storage blob upload --container-name \"$(applicationName)cont\" --file ./package.zip/package.zip --name \"package.zip\" --account-name $(applicationName)stra --account-key $ACCOUNT_KEY >/dev/null\n\naz storage blob upload --container-name \"$(applicationName)cont\" --file ./install.sh/install.sh --name \"install.sh\" --account-name $(applicationName)stra --account-key $ACCOUNT_KEY >/dev/null",
+                "scriptLocation": "inlineScript",
+                "scriptPath": ""
+              },
+              "name": "Upload Application to Storage account",
+              "overrideInputs": {},
+              "refName": "Task6",
+              "taskId": "46e4be58-730b-4389-8a2f-ea10b3e5e815",
+              "timeoutInMinutes": 0,
+              "version": "1.*"
+            },
+            {
+              "alwaysRun": false,
+              "condition": "succeeded()",
+              "continueOnError": false,
+              "definitionType": "task",
+              "enabled": true,
+              "inputs": {
+                "ConnectedServiceName": "7bd66006-2af3-4d76-afda-65f05e6bcc46",
+                "action": "Create Or Update Resource Group",
+                "copyAzureVMTags": "true",
+                "csmFile": "temp",
+                "csmFileLink": "https://bitbucket.org/automationlogic/azure-catalog/raw/2a493d79494e2d729bc5a075c854ef64a0ef7922/mainTemplate.json",
+                "csmParametersFile": "",
+                "csmParametersFileLink": "https://bitbucket.org/automationlogic/azure-catalog/raw/2a493d79494e2d729bc5a075c854ef64a0ef7922/parametersTemplate.json",
+                "deploymentGroupEndpoint": "",
+                "deploymentGroupName": "",
+                "deploymentMode": "Incremental",
+                "deploymentOutputs": "",
+                "enableDeploymentPrerequisites": "None",
+                "location": "$(location)",
+                "outputVariable": "",
+                "overrideParameters": "-appUpload [\"https://$(applicationName)stra.blob.core.windows.net/$(applicationName)cont/package.zip\",\"https://$(applicationName)stra.blob.core.windows.net/$(applicationName)cont/install.sh\"]",
+                "project": "",
+                "resourceGroupName": "$(resourceGroup)",
+                "templateLocation": "URL of the file"
+              },
+              "name": "Deploy Catalog",
+              "overrideInputs": {},
+              "refName": "Task3",
+              "taskId": "94a74903-f93f-4075-884f-dc11f34058b4",
+              "timeoutInMinutes": 0,
+              "version": "2.*"
+            }
+          ]
+        }
+      ],
+      "deployStep": {
+        "id": 2
+      },
+      "environmentOptions": {
+        "autoLinkWorkItems": false,
+        "emailNotificationType": "OnlyOnFailure",
+        "emailRecipients": "release.environment.owner;release.creator",
+        "enableAccessToken": false,
+        "publishDeploymentStatus": true,
+        "skipArtifactsDownload": false,
+        "timeoutInMinutes": 0
+      },
+      "executionPolicy": {
+        "concurrencyCount": 0,
+        "queueDepthCount": 0
+      },
+      "id": 1,
+      "name": "DEV",
+      "postDeployApprovals": {
+        "approvals": [
+          {
+            "id": 3,
+            "isAutomated": true,
+            "isNotificationOn": false,
+            "rank": 1
+          }
+        ]
+      },
+      "postDeploymentGates": {
+        "gates": [],
+        "gatesOptions": null,
+        "id": 0
+      },
+      "preDeployApprovals": {
+        "approvals": [
+          {
+            "id": 1,
+            "isAutomated": true,
+            "isNotificationOn": false,
+            "rank": 1
+          }
+        ]
+      },
+      "preDeploymentGates": {
+        "gates": [],
+        "gatesOptions": null,
+        "id": 0
+      },
+      "processParameters": {},
+      "properties": {},
+      "rank": 1,
+      "retentionPolicy": {
+        "daysToKeep": 30,
+        "releasesToKeep": 3,
+        "retainBuild": true
+      },
+      "schedules": [],
+      "variableGroups": [],
+      "variables": {
+        "adminPassword": {
+          "isSecret": true,
+          "value": null
+        },
+        "adminUsername": {
+          "value": "aladminuser"
+        },
+        "applicationGithub": {
+          "value": "https://test.git"
+        },
+        "applicationName": {
+          "value": "jkexampleapp"
+        },
+        "applicationPort": {
+          "value": "3000"
+        },
+        "databaseAdminPassword": {
+          "isSecret": true,
+          "value": null
+        },
+        "databaseAdminUsername": {
+          "value": "ALAdminDBUser"
+        },
+        "databaseName": {
+          "value": "jkexampledb1"
+        },
+        "databaseSelection": {
+          "value": "MsSQL"
+        },
+        "framework": {
+          "value": "IIS"
+        },
+        "instanceCount": {
+          "value": "1"
+        },
+        "instanceSize": {
+          "value": "Standard_A1"
+        },
+        "location": {
+          "value": "westeurope"
+        },
+        "osPlatform": {
+          "value": "Windows"
+        },
+        "resourceGroup": {
+          "value": "jkdevsite"
+        }
+      }
+    }
+ ]

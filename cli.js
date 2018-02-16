@@ -51,11 +51,11 @@ Promise.all([
 })
 .then(project => {
 	projectId = project.id
-	return vstsApi.createBuildDefinition(project.id, 'Hosted VS2017', 'Imported Build', buildProcess)
+	return vstsApi.createBuildDefinition(project.id, 'Hosted VS2017', 'Imported Build ' + timeStamp, buildProcess)
 })
 .then(buildDef => {
     buildDefId = buildDef.id
-    return vstsApi.createReleaseDefinition('Imported Release Definition', projectName, projectId, 'Imported Build', buildDef.id, 'Hosted VS2017' , releaseProcess) 
+    return vstsApi.createReleaseDefinition('Imported Release Definition ' + timeStamp, projectName, projectId, 'Imported Build ' + timeStamp, buildDef.id, 'Hosted VS2017' , releaseProcess) 
 })
 .then(console.log)
 .catch(console.error)
