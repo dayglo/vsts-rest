@@ -8,6 +8,11 @@ var vstsAccount = process.env.VSTS_ACCOUNT // 'al-opsrobot-2'
 var token =       process.env.VSTS_PAT;
 var vstsApi = new VstsApi(vstsAccount,token);
 
+const gitRepo = require('simple-git/promise')('./tests/repos/demoapplication');
+
+
+
+var timeStamp = Date.now()
 
 var projectName;
 
@@ -21,7 +26,10 @@ program
 	.parse(process.argv);
 
 
-var timeStamp = Date.now()
+function addRemote(){
+	return gitRepo.addRemote(projectName + timeStamp, 'https://'+ vstsAccount +'.visualstudio.com/_git/' +projectName + timeStamp)
+}
+
 
 if (!projectName) projectName = require("os").userInfo().username + '-' + timeStamp;
 console.log('Project name: ' + projectName)
@@ -32,7 +40,7 @@ function spitAndQuit(error) {
 	process.exit(5)
 }
 
-var build,release, projectId;
+var build,release,projectId,buildDefId;
 
 Promise.all([
 	fse.readJson(program.buildsteps  ).catch(spitAndQuit),
@@ -49,13 +57,27 @@ Promise.all([
 	if (project) 	return project
 	else 			return vstsApi.createProject(projectName)
 })
+.then(project=>{
+	return addRemote()
+	.then(()=>{
+		return project
+	}) 
+})
 .then(project => {
 	projectId = project.id
 	return vstsApi.createBuildDefinition(project.id, 'Hosted VS2017', 'Imported Build ' + timeStamp, buildProcess)
 })
 .then(buildDef => {
-    buildDefId = buildDef.id
-    return vstsApi.createReleaseDefinition('Imported Release Definition ' + timeStamp, projectName, projectId, 'Imported Build ' + timeStamp, buildDef.id, 'Hosted VS2017' , releaseProcess) 
+	buildDefId	= buildDef.id
+})
+.then(()=>{
+    return gitRepo.push(projectName + timeStamp) 
+})
+.then(()=>{
+    return vstsApi.startBuild(projectId, buildDefId)
+})
+.then(() => {
+    return vstsApi.createReleaseDefinition('Imported Release Definition ' + timeStamp, projectName, projectId, 'Imported Build ' + timeStamp, buildDefId, 'Hosted VS2017' , releaseProcess) 
 })
 .then(console.log)
 .catch(console.error)
