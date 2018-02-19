@@ -10,6 +10,9 @@
     "request": "^2.83.0",
     "simple-git": "^1.89.0"
   },
+  "bin": {
+    "vsts-import": "./cli.js",
+  },
   "devDependencies": {
     "njstrace": "0.0.2"
   },
