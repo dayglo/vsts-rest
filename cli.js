@@ -1,14 +1,22 @@
+const chalk = require('chalk');
 const package = require('./package.json')
 const program = require('commander');
 const VstsApi = require('./api.js');
 const fse = require('fs-extra')
+
+const gitRepo = require('simple-git/promise')('./tests/repos/demoapplication');
+
+if (!process.env.VSTS_ACCOUNT) {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
+if (!process.env.VSTS_PAT)     {console.log("Env var VSTS_PAT is not set. You need to generate one form the VSTS UI. Make sure it has access to the correct projects.") ; process.exit(1)}
 
 
 var vstsAccount = process.env.VSTS_ACCOUNT // 'al-opsrobot-2'
 var token =       process.env.VSTS_PAT;
 var vstsApi = new VstsApi(vstsAccount,token);
 
-const gitRepo = require('simple-git/promise')('./tests/repos/demoapplication');
+function log(t){
+	console.log(t)
+}
 
 
 
@@ -27,21 +35,40 @@ program
 
 
 function addRemote(){
-	return gitRepo.addRemote(projectName + timeStamp, 'https://'+ vstsAccount +'.visualstudio.com/_git/' +projectName + timeStamp)
+	return gitRepo.addRemote(projectName, 'https://'+ vstsAccount +'.visualstudio.com/_git/' +projectName + timeStamp)
 }
 
 
 if (!projectName) projectName = require("os").userInfo().username + '-' + timeStamp;
-console.log('Project name: ' + projectName)
-console.log(`Opening ${program.buildsteps} and ${program.releasesteps }...`)
+var buildDefinitionName = "Imported Build " + timeStamp
+var releaseDefinitionName = "Imported Release " + timeStamp
+console.log('Project name:         ' + chalk.blue(projectName))
+console.log('Build definition:     ' + chalk.magenta(buildDefinitionName))
+console.log('Release definition:   ' + chalk.green(releaseDefinitionName))
+
+
 
 function spitAndQuit(error) {
 	console.error("there was an error: " + error)
 	process.exit(5)
 }
 
+function setRemote(projectName){
+	return new Promise((resolve,reject)=>{
+
+		var addRemote = ()=>{
+			return gitRepo.addRemote(projectName, 'https://'+ vstsAccount +'.visualstudio.com/_git/' + projectName)
+		}
+		gitRepo.removeRemote(projectName)
+		.then(addRemote,addRemote)
+		.then(resolve,reject)
+	})
+}
+
+
 var build,release,projectId,buildDefId;
 
+log(`Opening ${program.buildsteps} and ${program.releasesteps }...`)
 Promise.all([
 	fse.readJson(program.buildsteps  ).catch(spitAndQuit),
 	fse.readJson(program.releasesteps).catch(spitAndQuit)
@@ -51,43 +78,47 @@ Promise.all([
 	releaseProcess = files[1]
 })
 .then(()=>{
+	log("Getting project data for project: " + chalk.blue(projectName))
 	return vstsApi.getProjectByName(projectName)
 })
 .then(project => {
 	if (project) 	return project
-	else 			return vstsApi.createProject(projectName)
+	else {
+		log("project didnt exist - creating it....")
+		return vstsApi.createProject(projectName)
+	}
 })
 .then(project=>{
-	return addRemote()
+	log("Set project remote")
+	return setRemote(projectName)
 	.then(()=>{
 		return project
-	}) 
+	})
+	.catch((e)=>{
+		console.error(e)
+		return project
+	})
 })
 .then(project => {
+	log("creating build definition: " + chalk.magenta(buildDefinitionName))
 	projectId = project.id
-	return vstsApi.createBuildDefinition(project.id, 'Hosted VS2017', 'Imported Build ' + timeStamp, buildProcess)
+	return vstsApi.createBuildDefinition(project.id, 'Hosted VS2017', buildDefinitionName, buildProcess)
 })
 .then(buildDef => {
 	buildDefId	= buildDef.id
 })
 .then(()=>{
-    return gitRepo.push(projectName + timeStamp) 
+	log("pushing code to repo")
+    return gitRepo.push(projectName, 'master')
 })
 .then(()=>{
+	log("starting build")
     return vstsApi.startBuild(projectId, buildDefId)
 })
 .then(() => {
-    return vstsApi.createReleaseDefinition('Imported Release Definition ' + timeStamp, projectName, projectId, 'Imported Build ' + timeStamp, buildDefId, 'Hosted VS2017' , releaseProcess) 
+	log("creating release definition: " + chalk.green(releaseDefinitionName))
+    return vstsApi.createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefId, 'Hosted VS2017' , releaseProcess) 
 })
 .then(console.log)
 .catch(console.error)
 
-
-// .then(console.log)
-// .catch(console.error)
-
-
-
-
-
-//if project exists dont create it, use it
