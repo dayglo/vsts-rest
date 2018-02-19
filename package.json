@@ -11,8 +11,12 @@
     "simple-git": "^1.89.0"
   },
   "bin": {
-    "vsts-import": "./cli.js",
+    "vsts-import": "./cli.js"
   },
+  "files": [
+    "cli.js",
+    "api.js"
+  ],
   "devDependencies": {
     "njstrace": "0.0.2"
   },

@@ -4,39 +4,53 @@ const program = require('commander');
 const VstsApi = require('./api.js');
 const fse = require('fs-extra')
 
-const gitRepo = require('simple-git/promise')('./tests/repos/demoapplication');
-
-if (!process.env.VSTS_ACCOUNT) {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
-if (!process.env.VSTS_PAT)     {console.log("Env var VSTS_PAT is not set. You need to generate one form the VSTS UI. Make sure it has access to the correct projects.") ; process.exit(1)}
-
-
-var vstsAccount = process.env.VSTS_ACCOUNT // 'al-opsrobot-2'
-var token =       process.env.VSTS_PAT;
-var vstsApi = new VstsApi(vstsAccount,token);
-
-function log(t){
-	console.log(t)
-}
-
-
-
 var timeStamp = Date.now()
-
-var projectName;
 
 program
 	.version(package.version)
 	.usage("[projectName]")
 	.arguments('[projectName]')
+	.option('-g, --gitrepo [path to git repo]', 'Path to the git repo to deploy. Default is the current directory.' , './')
 	.option('-b, --buildsteps [path to build process json]', 'Include release steps in the new release definition [buildSteps]', './buildProcess.json')
 	.option('-r, --releasesteps [path to release process json]', 'Include build steps in the new build definition [releaseSteps]', './releaseProcess.json')
 	.action((ProjectName)=>{projectName = ProjectName})
 	.parse(process.argv);
 
+var gitRepository = require('simple-git/promise')(program.gitrepo); 
 
-function addRemote(){
-	return gitRepo.addRemote(projectName, 'https://'+ vstsAccount +'.visualstudio.com/_git/' +projectName + timeStamp)
+if (!process.env.VSTS_ACCOUNT) {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
+if (!process.env.VSTS_PAT)     {console.log("Env var VSTS_PAT is not set. You need to generate one form the VSTS UI. Make sure it has access to the correct projects.") ; process.exit(1)}
+
+var projectName;
+var vstsAccount = process.env.VSTS_ACCOUNT // 'al-opsrobot-2'
+var token =       process.env.VSTS_PAT;
+var vstsApi = new VstsApi(vstsAccount,token);
+
+
+
+
+function log(t){
+	console.log(t)
 }
+function addRemote(){
+	return gitRepository.addRemote(projectName, 'https://'+ vstsAccount +'.visualstudio.com/_git/' +projectName + timeStamp)
+}
+function spitAndQuit(error) {
+	console.error("there was an error: " + error)
+	process.exit(5)
+}
+function setRemote(projectName){
+	return new Promise((resolve,reject)=>{
+
+		var addRemote = ()=>{
+			return gitRepository.addRemote(projectName, 'https://'+ vstsAccount +'.visualstudio.com/_git/' + projectName)
+		}
+		gitRepository.removeRemote(projectName)
+		.then(addRemote,addRemote)
+		.then(resolve,reject)
+	})
+}
+
 
 
 if (!projectName) projectName = require("os").userInfo().username + '-' + timeStamp;
@@ -48,22 +62,6 @@ console.log('Release definition:   ' + chalk.green(releaseDefinitionName))
 
 
 
-function spitAndQuit(error) {
-	console.error("there was an error: " + error)
-	process.exit(5)
-}
-
-function setRemote(projectName){
-	return new Promise((resolve,reject)=>{
-
-		var addRemote = ()=>{
-			return gitRepo.addRemote(projectName, 'https://'+ vstsAccount +'.visualstudio.com/_git/' + projectName)
-		}
-		gitRepo.removeRemote(projectName)
-		.then(addRemote,addRemote)
-		.then(resolve,reject)
-	})
-}
 
 
 var build,release,projectId,buildDefId;
@@ -109,7 +107,7 @@ Promise.all([
 })
 .then(()=>{
 	log("pushing code to repo")
-    return gitRepo.push(projectName, 'master')
+    return gitRepository.push(projectName, 'master')
 })
 .then(()=>{
 	log("starting build")
