@@ -75,3 +75,7 @@ export VSTS_AZURE_SERVICE=azureService // this is the name you created when you 
 vsts-import YourProjectName -g https://bitbucket.org/automationlogic/demoapplication 
 
 ```
+
+If all goes well, A build definition and release definition will be created. In addition, the specified repo will be pushed to your project, and a build will be initiated.
+
+
