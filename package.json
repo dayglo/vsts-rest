@@ -1,6 +1,6 @@
 {
   "name": "vsts-rest",
-  "version": "1.2.1",
+  "version": "1.3.1",
   "description": "",
   "main": "api.js",
   "dependencies": {
@@ -9,7 +9,8 @@
     "fs-extra": "^5.0.0",
     "promisify-node": "^0.4.0",
     "request": "^2.83.0",
-    "simple-git": "^1.89.0"
+    "simple-git": "^1.89.0",
+    "tmp": "0.0.33"
   },
   "bin": {
     "vsts-import": "./cli.js"

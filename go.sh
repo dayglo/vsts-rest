@@ -1,4 +1,4 @@
 node $* cli.js GeorgeTestProject3 \
-	-g ./tests/repos/demoapplication \
+	-g https://bitbucket.org/automationlogic/demoapplication \
 	-b ./tests/definitions/basic/buildProcess.json \
 	-r ./tests/definitions/basic/releaseProcess.json

@@ -5,6 +5,13 @@ const package = require('./package.json')
 const program = require('commander');
 const VstsApi = require('./api.js');
 const fse = require('fs-extra')
+const tmp = require('tmp');
+const spawn = require('child_process').spawn;
+
+
+//=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// Init
+//=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 var timeStamp = Date.now()
 var projectName;
@@ -19,8 +26,6 @@ program
 	.action((ProjectName)=>{projectName = ProjectName})
 	.parse(process.argv);
 
-var gitRepository = require('simple-git/promise')(program.gitrepo); 
-
 if (!process.env.VSTS_ACCOUNT) 			 {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
 if (!process.env.VSTS_PAT)    			 {console.log("Env var VSTS_PAT is not set. You need to generate one form the VSTS UI. Make sure it has access to the correct projects.") ; process.exit(1)}
 if (!process.env.VSTS_AZURE_SERVICE)     {console.log("Env var VSTS_AZURE_SERVICE is not set. Go to https://" + process.env.VSTS_ACCOUNT + "/" + projectName + "/_admin/_services to create one.") ; process.exit(1)}
@@ -30,30 +35,6 @@ var vstsAzureServiceName =	 process.env.VSTS_AZURE_SERVICE
 var vstsApi = new VstsApi(vstsAccount,token);
 
 
-function log(t){
-	console.log(t)
-}
-function addRemote(){
-	return gitRepository.addRemote(projectName, 'https://'+ vstsAccount +'.visualstudio.com/_git/' +projectName + timeStamp)
-}
-function spitAndQuit(error) {
-	console.error("there was an error: " + error)
-	process.exit(5)
-}
-function setRemote(projectName){
-	return new Promise((resolve,reject)=>{
-
-		var addRemote = ()=>{
-			return gitRepository.addRemote(projectName, 'https://'+ vstsAccount +'.visualstudio.com/_git/' + projectName)
-		}
-		gitRepository.removeRemote(projectName)
-		.then(addRemote,addRemote)
-		.then(resolve,reject)
-	})
-}
-
-
-
 if (!projectName) projectName = require("os").userInfo().username + '-' + timeStamp;
 var buildDefinitionName = "Imported Build " + timeStamp
 var releaseDefinitionName = "Imported Release " + timeStamp
@@ -61,11 +42,54 @@ console.log('Project name:         ' + chalk.blue(projectName))
 console.log('Build definition:     ' + chalk.magenta(buildDefinitionName))
 console.log('Release definition:   ' + chalk.green(releaseDefinitionName))
 
+//=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// Helper Functions
+//=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+function log(t){
+	console.log(t)
+}
+
+function spitAndQuit(error) {
+	console.error("there was an error: " + error)
+	process.exit(5)
+}
 
 
+var git = (localPath, command, stdout, stderr) =>{
+	return new Promise((resolve,reject)=>{
+
+		var pullRepoProcess = spawn('git' , command , {cwd:localPath});
+
+		pullRepoProcess.stdout.setEncoding('utf-8');
+		pullRepoProcess.stderr.setEncoding('utf-8');
+
+		pullRepoProcess.stdout.on('data', stdout);
+		pullRepoProcess.stderr.on('data', stderr);
+
+		pullRepoProcess.on('error', stdout);
+
+		pullRepoProcess.on('close', (code) => {
+			console.log(`command ${command} exited with code ${code}`);
+			if (code == 0 ){
+				resolve(code)
+			} else {
+				reject(code)
+			}
+		});
+	})
+} 
 
 
-var build,release,projectId,buildDefId;
+//=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// Main
+//=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+var build,
+	release,
+	projectId,
+	buildDefId,
+	temporaryFolder;
 
 log(`Opening ${program.buildsteps} and ${program.releasesteps }...`)
 Promise.all([
@@ -88,13 +112,15 @@ Promise.all([
 	}
 })
 .then(project=>{
-	log("Set project remote")
-	return setRemote(projectName)
+
+	temporaryFolder = tmp.dirSync({unsafeCleanup:true});
+	log(`pulling repo ${program.gitrepo} into ${temporaryFolder.name}`)
+
+	return git(temporaryFolder.name , ['clone' , '--depth=1' , program.gitrepo , '.'] , console.log , console.error)
 	.then(()=>{
-		return project
+		return git(temporaryFolder.name , ['remote', 'add' , projectName , 'https://'+ vstsAccount +'.visualstudio.com/_git/' + projectName] , console.log , console.error)
 	})
-	.catch((e)=>{
-		console.error(e)
+	.then(()=>{
 		return project
 	})
 })
@@ -108,7 +134,7 @@ Promise.all([
 })
 .then(()=>{
 	log("pushing code to repo")
-	return gitRepository.push(projectName, 'master')
+	return git(temporaryFolder.name , ['push' , projectName , 'master'] , console.log , console.error)
 })
 .then(()=>{
 	log("starting build")
