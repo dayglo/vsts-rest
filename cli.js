@@ -116,7 +116,7 @@ Promise.all([
 	temporaryFolder = tmp.dirSync({unsafeCleanup:true});
 	log(`pulling repo ${program.gitrepo} into ${temporaryFolder.name}`)
 
-	return git(temporaryFolder.name , ['clone' , '--depth=1' , program.gitrepo , '.'] , console.log , console.error)
+	return git(temporaryFolder.name , ['clone' , program.gitrepo , '.'] , console.log , console.error)
 	.then(()=>{
 		return git(temporaryFolder.name , ['remote', 'add' , projectName , 'https://'+ vstsAccount +'.visualstudio.com/_git/' + projectName] , console.log , console.error)
 	})
