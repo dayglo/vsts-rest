@@ -1,4 +1,4 @@
-# Automation Logic - Vsts api toolkit
+# Automation Logic's Visual Studio Team Services API toolkit
 
 This repo consists of 
 
