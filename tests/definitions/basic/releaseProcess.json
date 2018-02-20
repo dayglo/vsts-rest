@@ -1,5 +1,14 @@
 [
     {
+
+      "owner": {
+          "displayName": "George Cairns",
+          "id": "bbb8585f-0e50-4a81-884c-8bcce0330c36",
+          "isContainer": false,
+          "uniqueName": "george@opsrobot.co.uk",
+          "url": "https://al-opsrobot-1.visualstudio.com/"
+      },
+
       "conditions": [
         {
           "conditionType": 1,
