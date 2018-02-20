@@ -144,6 +144,9 @@ Promise.all([
 	log("creating release definition: " + chalk.green(releaseDefinitionName))
 	return vstsApi.createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefId, 'Hosted VS2017' , releaseProcess, vstsAzureServiceName) 
 })
+.then(json => {
+	return JSON.stringify(json,null,2)
+})
 .then(console.log)
 .catch(console.error)
 

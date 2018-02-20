@@ -7,18 +7,40 @@ module.exports = function(vstsAccount, token) {
     var endPoint   = 'https://'+ vstsAccount +'.visualstudio.com'
     var rmEndPoint = 'https://'+ vstsAccount +'.vsrm.visualstudio.com'
 
-    vstsApi.getObject = (url) => {
+    vstsApi.getObject = (url, endpoint) => {
         return new Promise((resolve, reject)=>{
+            if (endpoint) endPoint = endpoint;
+
             var options = { method: 'GET',
                 url: endPoint +  url,
                 headers: {
-                    accept: 'application/json',
+                    accept: 'application/json;api-version=4.0-preview',
                     'content-type': 'application/json',
                     origin: endPoint
                 },
                 json: true 
             };
 
+            request(options, function (error, response, body) {
+                if (error) reject( new Error(error))
+                else resolve(body)
+            }).auth('',token);
+        })
+    }
+
+
+    vstsApi.postObject = (url, body) => {
+        return new Promise((resolve, reject)=>{
+            var options = { method: 'POST',
+                url: endPoint +  url,
+                headers: {
+                    accept: 'application/json;api-version=4.0-preview',
+                    'content-type': 'application/json',
+                    origin: endPoint
+                },
+                json: true,
+                body: body
+            };
             request(options, function (error, response, body) {
                 if (error) reject( new Error(error))
                 else resolve(body)
@@ -34,6 +56,53 @@ module.exports = function(vstsAccount, token) {
                 },t * 1000)
             }) 
         }
+    }
+
+    vstsApi.getActiveUser = ()=>{
+        return vstsApi.getObject('/_apis/profile/profiles/me', 'https://app.vssps.visualstudio.com')
+    }
+
+    vstsApi.searchIdentity = (identityEmail) => {
+
+         body = {
+            "filterByAncestorEntityIds": [],
+            "filterByEntityIds": [],
+            "identityTypes": [
+            "user",
+            "group"
+            ],
+            "operationScopes": [
+            "ims"
+            ],
+            "options": {
+            "MaxResults": 40,
+            "MinResults": 40
+            },
+            "properties": [
+            "DisplayName",
+            "IsMru",
+            "ScopeName",
+            "SamAccountName",
+            "Active",
+            "SubjectDescriptor",
+            "Department",
+            "JobTitle",
+            "Mail",
+            "MailNickname",
+            "PhysicalDeliveryOfficeName",
+            "SignInAddress",
+            "Surname",
+            "Guest",
+            "TelephoneNumber",
+            "Description"
+            ],
+            "query": identityEmail
+        }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+
+        return vstsApi.postObject('/_apis/IdentityPicker/Identities', body)
+        .then(o => {
+            return o.results[0].identities[0]
+        })
     }
 
     vstsApi.getAzureRmSubscriptions = () => {
@@ -66,29 +135,37 @@ module.exports = function(vstsAccount, token) {
 
     vstsApi.getServiceEndpoints = (projectId) => {
         return vstsApi.getObject('/DefaultCollection/' + projectId +'/_apis/distributedtask/serviceendpoints')
-        .then(o=>{
-            return o.value
-        })
+        .then(o => o.value)
     }
 
-    vstsApi.createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseEnvironments, azureServiceEndpointName) => { 
+    vstsApi.createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseEnvironments, azureServiceEndpointName, user) => { 
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
             vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues'),
             vstsApi.getDefaultCollection(),
-            vstsApi.getServiceEndpoint(projectId, azureServiceEndpointName)
+            vstsApi.getServiceEndpoint(projectId, azureServiceEndpointName),
+            vstsApi.searchIdentity('george@automationlogic.com')
         ])
         .then((queryData)=>{
             var project = queryData[0];
             var projectQueues = queryData[1];
             var defaultCollectionId = queryData[2].id;
             var azureServiceEndpointId = queryData[3].id;
+            var identity = queryData[4];
+
+            var owner = {
+                "displayName": identity.displayName,
+                "id": identity.localId,
+                "isContainer": false,
+                "uniqueName": identity.signInAddress,
+                "url": endPoint
+            }
 
             var queueId = projectQueues.value.filter(q => q.name == queueName)[0].id;
             projectName = project.name;
 
-            return vstsApi._createReleaseDefinition(defaultCollectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments, azureServiceEndpointId)
+            return vstsApi._createReleaseDefinition(defaultCollectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments, azureServiceEndpointId, owner)
         })
     }
 
@@ -112,7 +189,7 @@ module.exports = function(vstsAccount, token) {
     }
 
 
-    vstsApi._createReleaseDefinition = (collectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments, azureServiceEndpointId) => {
+    vstsApi._createReleaseDefinition = (collectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments, azureServiceEndpointId, owner) => {
         return new Promise((resolve,reject)=>{ 
 
             //overwrite azure service endpoint IDs and vsts queue ID
@@ -136,18 +213,10 @@ module.exports = function(vstsAccount, token) {
                 return phase
             })
 
-            var ownerTemp = 
-            {
-                "displayName": "George Cairns",
-                "id": "bbb8585f-0e50-4a81-884c-8bcce0330c36",
-                "isContainer": false,
-                "uniqueName": "george@opsrobot.co.uk",
-                "url": "https://al-opsrobot-1.visualstudio.com/"
-            }
-
+            releaseEnvironments[0].owner = owner
            
             var rmObj = {
-                owner : ownerTemp,
+                owner : owner,
                 "id": 0,
                 "name": releaseDefinitionName,
                 "source": 2,
