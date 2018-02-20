@@ -36,23 +36,59 @@ module.exports = function(vstsAccount, token) {
         }
     }
 
+    vstsApi.getAzureRmSubscriptions = () => {
 
-    vstsApi.createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseEnvironments) => { 
+        // {
+        //     "value": [
+        //         {
+        //             "displayName": "Pay-As-You-Go",
+        //             "subscriptionId": "00f39173-5e2b-4534-afc1-e899be7bca9e",
+        //             "subscriptionTenantId": "2822f6f8-8345-4f88-8319-23f1c0b87a65",
+        //             "subscriptionTenantName": null
+        //         }
+        //     ],
+        //     "errorMessage": null
+        // }
+
+
+         return vstsApi.getObject('_apis/distributedtask/serviceendpointproxy/azurermsubscriptions')
+         .then(o=>{
+            return o.value
+         })
+    }
+
+    vstsApi.getServiceEndpoint = (projectId, endpointName) =>{
+        return vstsApi.getServiceEndpoints (projectId)
+        .then((endpoints)=>{
+            return endpoints.filter(e => e.name == endpointName)[0]
+        })
+    }
+
+    vstsApi.getServiceEndpoints = (projectId) => {
+        return vstsApi.getObject('/DefaultCollection/' + projectId +'/_apis/distributedtask/serviceendpoints')
+        .then(o=>{
+            return o.value
+        })
+    }
+
+    vstsApi.createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseEnvironments, azureServiceEndpointName) => { 
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
             vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues'),
-            vstsApi.getDefaultCollection()
+            vstsApi.getDefaultCollection(),
+            vstsApi.getServiceEndpoint(projectId, azureServiceEndpointName)
         ])
         .then((queryData)=>{
-            project = queryData[0];
-            projectQueues = queryData[1];
-            defaultCollectionId = queryData[2].id;
+            var project = queryData[0];
+            var projectQueues = queryData[1];
+            var defaultCollectionId = queryData[2].id;
+            var azureServiceEndpointId = queryData[3].id;
 
             var queueId = projectQueues.value.filter(q => q.name == queueName)[0].id;
             projectName = project.name;
 
-            return vstsApi._createReleaseDefinition(defaultCollectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments)
+            return vstsApi._createReleaseDefinition(defaultCollectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments, azureServiceEndpointId)
         })
     }
 
@@ -75,114 +111,43 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
-    vstsApi._createReleaseDefinition = (collectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments) => {
+
+    vstsApi._createReleaseDefinition = (collectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments, azureServiceEndpointId) => {
         return new Promise((resolve,reject)=>{ 
 
-            var releaseEnvironments = [
-                {
-                    "id": -1,
-                    "name": "Environment 1",
-                    "rank": 1,
-                    "variables": {},
-                    "variableGroups": [],
-                    "preDeployApprovals": {
-                        "approvals": [
-                            {
-                                "rank": 1,
-                                "isAutomated": true,
-                                "isNotificationOn": false,
-                                "id": 0
-                            }
-                        ]
-                    },
-                    "deployStep": {
-                        "tasks": [],
-                        "id": 0
-                    },
-                    "postDeployApprovals": {
-                        "approvals": [
-                            {
-                                "rank": 1,
-                                "isAutomated": true,
-                                "isNotificationOn": false,
-                                "id": 0
-                            }
-                        ]
-                    },
-                    "deployPhases": [
-                        {
-                            "deploymentInput": {
-                                "parallelExecution": {
-                                    "parallelExecutionType": "none"
-                                },
-                                "skipArtifactsDownload": false,
-                                "artifactsDownloadInput": {},
-                                "queueId": queueId,
-                                "demands": [],
-                                "enableAccessToken": false,
-                                "timeoutInMinutes": 0,
-                                "jobCancelTimeoutInMinutes": 1,
-                                "condition": "succeeded()",
-                                "overrideInputs": {}
-                            },
-                            "rank": 1,
-                            "phaseType": 1,
-                            "name": "Agent phase",
-                            "workflowTasks": [],
-                            "tasks": []
+            //overwrite azure service endpoint IDs and vsts queue ID
+            releaseEnvironments[0].deployPhases = releaseEnvironments[0].deployPhases.map((phase)=>{
+                phase.deploymentInput.queueId = queueId
+                
+                if ((phase["workflowTasks"]) && (azureServiceEndpointId)) {
+                    debugger
+                    phase.workflowTasks = phase.workflowTasks.map(task=>{
+                        if (task["inputs"]["ConnectedServiceName"]) {
+                            task.inputs.ConnectedServiceName = azureServiceEndpointId
                         }
-                    ],
-                    "runOptions": {},
-                    "environmentOptions": {
-                        "emailNotificationType": "OnlyOnFailure",
-                        "emailRecipients": "release.environment.owner;release.creator",
-                        "skipArtifactsDownload": false,
-                        "timeoutInMinutes": 0,
-                        "enableAccessToken": false,
-                        "publishDeploymentStatus": true,
-                        "autoLinkWorkItems": false
-                    },
-                    "demands": [],
-                    "conditions": [
-                        {
-                            "conditionType": 1,
-                            "name": "ReleaseStarted",
-                            "value": ""
+                            if (task["inputs"]["connectedServiceNameARM"]) {
+                            task.inputs.connectedServiceNameARM = azureServiceEndpointId
                         }
-                    ],
-                    "executionPolicy": {
-                        "queueDepthCount": 0,
-                        "concurrencyCount": 0
-                    },
-                    "schedules": [],
-                    "properties": {},
-                    "preDeploymentGates": {
-                        "id": 0,
-                        "gatesOptions": null,
-                        "gates": []
-                    },
-                    "postDeploymentGates": {
-                        "id": 0,
-                        "gatesOptions": null,
-                        "gates": []
-                    },
-                    "owner": {
-                        "displayName": "George Cairns",
-                        "id": "bbb8585f-0e50-4a81-884c-8bcce0330c36",
-                        "isContainer": false,
-                        "uniqueName": "george@opsrobot.co.uk",
-                        "url": "https://al-opsrobot-1.visualstudio.com/"
-                    },
-                    "retentionPolicy": {
-                        "daysToKeep": 30,
-                        "releasesToKeep": 3,
-                        "retainBuild": true
-                    },
-                    "processParameters": {}
+                        return task
+                    })
+                    debugger
                 }
-            ]
 
+                return phase
+            })
+
+            var ownerTemp = 
+            {
+                "displayName": "George Cairns",
+                "id": "bbb8585f-0e50-4a81-884c-8bcce0330c36",
+                "isContainer": false,
+                "uniqueName": "george@opsrobot.co.uk",
+                "url": "https://al-opsrobot-1.visualstudio.com/"
+            }
+
+           
             var rmObj = {
+                owner : ownerTemp,
                 "id": 0,
                 "name": releaseDefinitionName,
                 "source": 2,
@@ -193,45 +158,6 @@ module.exports = function(vstsAccount, token) {
                 "modifiedOn": "2018-02-15T16:57:54.742Z",
                 "environments": releaseEnvironments,
                 "artifacts": [
-
-
-// {
-//       "alias": "GeorgeTestProject-CI",
-//       "definitionReference": {
-//         "artifactSourceDefinitionUrl": {
-//           "id": "https://al-opsrobot-2.visualstudio.com/_permalink/_build/index?collectionId=6de18e65-7250-4d77-a0f5-937656f08a7e&projectId=8c8528f2-40e6-4dba-bf80-07ce61f71f0e&definitionId=3",
-//           "name": ""
-//         },
-//         "defaultVersionBranch": {
-//           "id": "",
-//           "name": ""
-//         },
-//         "defaultVersionSpecific": {
-//           "id": "",
-//           "name": ""
-//         },
-//         "defaultVersionTags": {
-//           "id": "",
-//           "name": ""
-//         },
-//         "defaultVersionType": {
-//           "id": "latestType",
-//           "name": "Latest"
-//         },
-//         "definition": {
-//           "id": "3",
-//           "name": "GeorgeTestProject-CI"
-//         },
-//         "project": {
-//           "id": "8c8528f2-40e6-4dba-bf80-07ce61f71f0e",
-//           "name": "GeorgeTestProject"
-//         }
-//       },
-//       "isPrimary": true,
-//       "sourceId": "8c8528f2-40e6-4dba-bf80-07ce61f71f0e:3",
-//       "type": "Build"
-//     }
-
                     {
                         "type": "Build",
                         "definitionReference": {

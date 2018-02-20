@@ -5,6 +5,7 @@ const VstsApi = require('./api.js');
 const fse = require('fs-extra')
 
 var timeStamp = Date.now()
+var projectName;
 
 program
 	.version(package.version)
@@ -18,15 +19,13 @@ program
 
 var gitRepository = require('simple-git/promise')(program.gitrepo); 
 
-if (!process.env.VSTS_ACCOUNT) {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
-if (!process.env.VSTS_PAT)     {console.log("Env var VSTS_PAT is not set. You need to generate one form the VSTS UI. Make sure it has access to the correct projects.") ; process.exit(1)}
-
-var projectName;
-var vstsAccount = process.env.VSTS_ACCOUNT // 'al-opsrobot-2'
-var token =       process.env.VSTS_PAT;
+if (!process.env.VSTS_ACCOUNT) 			 {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
+if (!process.env.VSTS_PAT)    			 {console.log("Env var VSTS_PAT is not set. You need to generate one form the VSTS UI. Make sure it has access to the correct projects.") ; process.exit(1)}
+if (!process.env.VSTS_AZURE_SERVICE)     {console.log("Env var VSTS_AZURE_SERVICE is not set. Go to https://" + process.env.VSTS_ACCOUNT + "/" + projectName + "/_admin/_services to create one.") ; process.exit(1)}
+var vstsAccount = 			 process.env.VSTS_ACCOUNT // 'al-opsrobot-2'
+var token =      			 process.env.VSTS_PAT;
+var vstsAzureServiceName =	 process.env.VSTS_AZURE_SERVICE
 var vstsApi = new VstsApi(vstsAccount,token);
-
-
 
 
 function log(t){
@@ -107,15 +106,15 @@ Promise.all([
 })
 .then(()=>{
 	log("pushing code to repo")
-    return gitRepository.push(projectName, 'master')
+	return gitRepository.push(projectName, 'master')
 })
 .then(()=>{
 	log("starting build")
-    return vstsApi.startBuild(projectId, buildDefId)
+	return vstsApi.startBuild(projectId, buildDefId)
 })
 .then(() => {
 	log("creating release definition: " + chalk.green(releaseDefinitionName))
-    return vstsApi.createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefId, 'Hosted VS2017' , releaseProcess) 
+	return vstsApi.createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefId, 'Hosted VS2017' , releaseProcess, vstsAzureServiceName) 
 })
 .then(console.log)
 .catch(console.error)
