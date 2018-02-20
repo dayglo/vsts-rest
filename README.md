@@ -7,6 +7,8 @@ This repo consists of
 
 # How to use the client library
 
+IN your terminal, run:
+
 ```
 mkdir myNewProject
 cd myNewProject
@@ -49,7 +51,7 @@ and run it with
 node myprogram.js 'My Project Name'
 ```
 
-You should see a json object pop out which describes your vsts project 
+You should see a json object pop out which describes your vsts project. There are other features (such as creating build definitions etc), but they are yet to be documented. To see how to write a longer program with the module, see the [cli.js file](https://bitbucket.org/automationlogic/vsts-rest/src/6e3a5c4547272803e7c97608dd9e87f384625540/cli.js?at=master&fileviewer=file-view-default). 
 
 # How to use the command line tools
 
