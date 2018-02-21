@@ -69,7 +69,8 @@ Run these commands:
 
 ```
 export VSTS_PAT=your-pat-token 
-export VSTS_ACCOUNT=your-vsts-account.
+export VSTS_ACCOUNT=your-vsts-account
+export VSTS_USER=your-vsts-email-address
 export VSTS_AZURE_SERVICE=azureService // this is the name you created when you made the azure link
 
 vsts-import YourProjectName -g https://bitbucket.org/automationlogic/demoapplication 
