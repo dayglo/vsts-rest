@@ -28,9 +28,11 @@ program
 
 if (!process.env.VSTS_ACCOUNT) 			 {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
 if (!process.env.VSTS_PAT)    			 {console.log("Env var VSTS_PAT is not set. You need to generate one form the VSTS UI. Make sure it has access to the correct projects.") ; process.exit(1)}
+if (!process.env.VSTS_USER)    			 {console.log("Env var VSTS_USER is not set. This should be set to the email address you use to log into VSTS.") ; process.exit(1)}
 if (!process.env.VSTS_AZURE_SERVICE)     {console.log("Env var VSTS_AZURE_SERVICE is not set. Go to https://" + process.env.VSTS_ACCOUNT + "/" + projectName + "/_admin/_services to create one.") ; process.exit(1)}
 var vstsAccount = 			 process.env.VSTS_ACCOUNT // 'al-opsrobot-2'
 var token =      			 process.env.VSTS_PAT;
+var user =      			 process.env.VSTS_USER;
 var vstsAzureServiceName =	 process.env.VSTS_AZURE_SERVICE
 var vstsApi = new VstsApi(vstsAccount,token);
 
@@ -142,7 +144,7 @@ Promise.all([
 })
 .then(() => {
 	log("creating release definition: " + chalk.green(releaseDefinitionName))
-	return vstsApi.createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefId, 'Hosted VS2017' , releaseProcess, vstsAzureServiceName) 
+	return vstsApi.createReleaseDefinition(releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefId, 'Hosted VS2017' , releaseProcess, vstsAzureServiceName, user) 
 })
 .then(json => {
 	return JSON.stringify(json,null,2)

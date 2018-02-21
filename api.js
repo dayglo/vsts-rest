@@ -145,7 +145,7 @@ module.exports = function(vstsAccount, token) {
             vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues'),
             vstsApi.getDefaultCollection(),
             vstsApi.getServiceEndpoint(projectId, azureServiceEndpointName),
-            vstsApi.searchIdentity('george@automationlogic.com')
+            vstsApi.searchIdentity(user)
         ])
         .then((queryData)=>{
             var project = queryData[0];
