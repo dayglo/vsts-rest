@@ -103,6 +103,11 @@ module.exports = function(vstsAccount, token) {
         .then(o => {
             return o.results[0].identities[0]
         })
+        .catch(e=>{
+            console.error('Couldnt search identities: ' + e);
+            process.exit(10)
+        })
+
     }
 
     vstsApi.getAzureRmSubscriptions = () => {
@@ -129,7 +134,12 @@ module.exports = function(vstsAccount, token) {
     vstsApi.getServiceEndpoint = (projectId, endpointName) =>{
         return vstsApi.getServiceEndpoints (projectId)
         .then((endpoints)=>{
-            return endpoints.filter(e => e.name == endpointName)[0]
+            var result = endpoints.filter(e => e.name == endpointName)[0]
+            if (result) return result  
+            else {
+                console.error('the specified service endpoint ('+ endpointName +') couldnt be found.')
+                process.exit(11)
+            }
         })
     }
 
@@ -166,6 +176,10 @@ module.exports = function(vstsAccount, token) {
             projectName = project.name;
 
             return vstsApi._createReleaseDefinition(defaultCollectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments, azureServiceEndpointId, owner)
+        })
+        .catch(e=>{
+            console.error('Couldnt create the release definition: ' + e)
+            process.exit(10)
         })
     }
 
@@ -303,6 +317,10 @@ module.exports = function(vstsAccount, token) {
         .then(()=>{
             return vstsApi.getProjectByName(projectName)
         })
+        .catch(e=>{
+            console.error('Couldnt create the project: ' + e)
+            process.exit(10)
+        })
     }
 
     vstsApi._createProject = (projectName) => {
@@ -373,8 +391,12 @@ module.exports = function(vstsAccount, token) {
             .then((projectData)=>{
                 var result = null
                 var project = projectData.value.filter(p => p.name == projectName )
-                if (project) result = project[0]
-                resolve(result)
+                if (project) {
+                    result = project[0]
+                    resolve(result)
+                } else {
+                    reject("the project " + projectName +" couldnt be found")
+                }
             })
             .then(resolve,reject)
         })
@@ -486,10 +508,18 @@ module.exports = function(vstsAccount, token) {
             project = queryData[0];
             projectQueues = queryData[1];
 
-            var queueId = projectQueues.value.filter(q => q.name == queueName)[0].id;
-            projectName = project.name;
-
-            return vstsApi._createBuildDefinition( projectId, projectName, queueId, queueName ,buildDefinitionName, buildProcess)
+            var queue = projectQueues.value.filter(q => q.name == queueName)[0];
+            if (queue) {
+                projectName = project.name;
+                return vstsApi._createBuildDefinition( projectId, projectName, queue.id, queueName ,buildDefinitionName, buildProcess)     
+            } else {
+                console.error("The queue " + queueName + " could not be found")
+                process.exit(12)
+            }
+        })
+        .catch(e=>{
+            console.error('Couldnt create the build definition: ' + e)
+            process.exit(10)
         })
     }
 
