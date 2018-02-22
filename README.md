@@ -63,7 +63,7 @@ npm i -g vsts-rest // install the client
 
 Make sure you have a vsts account created with a project that has an azure subscription linked.
 
-Navigate to a folder that contains buildProcess.json and releaseProcess.json. TODO: document how to make these.
+Navigate to a folder that contains buildProcess.json and releaseProcess.json. Documentation for this can be found [here.](https://bitbucket.org/automationlogic/vsts-definitions)
 
 Run these commands:
 
