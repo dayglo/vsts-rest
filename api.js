@@ -8,10 +8,12 @@ module.exports = function(vstsAccount, token) {
     var rmEndPoint = 'https://'+ vstsAccount +'.vsrm.visualstudio.com'
 
     var headers = {
-        accept: 'application/json;api-version=4.0-preview',
+        accept: 'application/json;api-version=4.0-preview;excludeUrls=true',
         'content-type': 'application/json',
         origin: endPoint,
     }
+
+
 
     function checkResponse(resolve,reject,predicate,resultExtractor){
         return (error, response, body) => {
@@ -32,8 +34,6 @@ module.exports = function(vstsAccount, token) {
             }
         }
     }
-
-
 
     vstsApi.getObject = (url, endpoint, predicate, resultExtractor) => {
         return new Promise((resolve, reject)=>{
@@ -57,6 +57,14 @@ module.exports = function(vstsAccount, token) {
     }
 
     vstsApi.postObject = (url, body, endpoint, predicate, resultExtractor) => {
+        return vstsApi.sendObject('POST', url, body, endpoint, predicate, resultExtractor) 
+    }
+
+    vstsApi.putObject = (url, body, endpoint, predicate, resultExtractor) => {
+        return vstsApi.sendObject('PUT', url, body, endpoint, predicate, resultExtractor) 
+    }
+
+    vstsApi.sendObject = (method, url, body, endpoint, predicate, resultExtractor) => {
         return new Promise((resolve, reject)=>{
             if (endpoint) endPoint = endpoint;
 
@@ -66,7 +74,7 @@ module.exports = function(vstsAccount, token) {
                 }
             }
 
-            var options = { method: 'POST',
+            var options = { method: method,
                 url: endPoint +  url,
                 headers: headers,
                 json: true,
@@ -158,19 +166,6 @@ module.exports = function(vstsAccount, token) {
 
     vstsApi.getAzureRmSubscriptions = () => {
 
-        // {
-        //     "value": [
-        //         {
-        //             "displayName": "Pay-As-You-Go",
-        //             "subscriptionId": "00f39173-5e2b-4534-afc1-e899be7bca9e",
-        //             "subscriptionTenantId": "2822f6f8-8345-4f88-8319-23f1c0b87a65",
-        //             "subscriptionTenantName": null
-        //         }
-        //     ],
-        //     "errorMessage": null
-        // }
-
-
          return vstsApi.getObject('_apis/distributedtask/serviceendpointproxy/azurermsubscriptions')
          .then(o=>{
             return o.value
@@ -194,7 +189,7 @@ module.exports = function(vstsAccount, token) {
         .then(o => o.value)
     }
 
-    vstsApi.createReleaseDefinition = (projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseDefinition, azureServiceEndpointName, user, overwrite) => { 
+    vstsApi.createReleaseDefinition = (projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseDefinition, azureServiceEndpointName, user, overwrite, releaseVariables) => { 
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
@@ -232,11 +227,11 @@ module.exports = function(vstsAccount, token) {
                     return vstsApi.deleteReleaseDefinition(projectId, definitions[0].id)
                     .then(()=>{
                         console.log("Recreating release definition " + releaseDefinition.name)
-                        return vstsApi._createReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner)
+                        return vstsApi._createReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables)
                     })
                 }
 
-                return vstsApi._createReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner)
+                return vstsApi._createReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables)
             })
 
         })
@@ -267,7 +262,7 @@ module.exports = function(vstsAccount, token) {
         return vstsApi.delObject('/'+ projectId +'/_apis/Release/definitions/' + definitionId , rmEndPoint)
     }
 
-    vstsApi._createReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner) => {
+    vstsApi._createReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables) => {
         return new Promise((resolve,reject)=>{ 
 
             //overwrite azure service endpoint IDs and vsts queue ID
@@ -290,6 +285,10 @@ module.exports = function(vstsAccount, token) {
 
                 return phase
             })
+
+            Object.keys(releaseVariables).forEach(function(key) {
+                releaseDefinition.environments[0].variables[key] = releaseVariables[key] 
+            });
 
             releaseDefinition.environments[0].owner = owner
             releaseDefinition.owner = owner
@@ -405,6 +404,7 @@ module.exports = function(vstsAccount, token) {
         return vstsApi.delObject('/_apis/projects/' + projectId)
     }
 
+
     vstsApi.createBuildDefinition = (projectId, queueName, buildDefinition, overwrite)=>{
 
         return Promise.all([
@@ -419,7 +419,6 @@ module.exports = function(vstsAccount, token) {
             if (queue) {
                 projectName = project.name;
 
-
                 return vstsApi.getBuildDefinitionsbyName(projectId, buildDefinition.name)
                 .then(definitions => {
                     if (definitions && !overwrite) {
@@ -427,12 +426,9 @@ module.exports = function(vstsAccount, token) {
                     }
 
                     if (definitions && overwrite) {
-                        console.log("Build definition " + buildDefinition.name + " already exists, deleting...")
-                        return vstsApi.deleteBuildDefinition(projectId, definitions[0].id)
-                        .then(()=>{
-                            console.log("Recreating build definition " + buildDefinition.name)
-                            return vstsApi._createBuildDefinition( projectId, projectName, queue.id, queueName, buildDefinition)
-                        })
+                        console.log("Build definition " + buildDefinition.name + " already exists, updating...")
+
+                        return vstsApi._updateBuildDefinition( projectId, projectName, queue.id, queueName, definitions[0], buildDefinition.name, definitions[0].id)
                     }
 
                     return vstsApi._createBuildDefinition( projectId, projectName, queue.id, queueName, buildDefinition)
@@ -450,6 +446,26 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
+    vstsApi._updateBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName, buildDefinitionId)  => {
+        return vstsApi._assembleBuildDefinition(projectId, projectName, queueId, queueName, buildDefinition, buildDefinition.name, buildDefinitionId)
+        .then(buildDefinition => {
+            return vstsApi.putObject(
+                '/' + projectId + '/_apis/build/definitions/' + buildDefinitionId,
+                buildDefinition
+            )
+        })
+    }
+
+    vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName)  => {
+        return vstsApi._assembleBuildDefinition(projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName)
+        .then(buildDefinition => {
+            return vstsApi.postObject(
+                '/' + projectId + '/_apis/build/definitions',
+                buildDefinition
+            )
+        })
+    }
+
     vstsApi.getBuildDefinitionsbyName = (projectId, buildDefinitionName) => {
         return vstsApi.getObject(
             '/' + projectId + '/_apis/build/definitions/',
@@ -461,16 +477,28 @@ module.exports = function(vstsAccount, token) {
         )
     }
 
+    vstsApi.getBuildDefinition = (projectId, buildDefinitionId) => {
+        return vstsApi.getObject(
+            '/' + projectId + '/_apis/build/definitions/' + buildDefinitionId
+        )
+    }
+
     vstsApi.deleteBuildDefinition = (projectId, definitionId) => {
         return vstsApi.delObject('/' + projectId + '/_apis/build/definitions/' + definitionId)
     }
 
-    vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName) => {
+    vstsApi._assembleBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName, buildDefinitionId) => {
 
         if (!buildDefinitionName) {
             buildDefinitionName = buildDefinition.name;
         }
 
+        if (buildDefinitionId) {
+            buildDefinition.id = buildDefinitionId
+            buildDefinition.uri = "vstfs:///Build/Definition/" + buildDefinitionId
+
+        }
+        
         var queue =  {
             _links: {
                 self: {
@@ -511,10 +539,8 @@ module.exports = function(vstsAccount, token) {
         delete buildDefinition.project;
         delete buildDefinition._links;
 
-        return vstsApi.postObject(
-            '/' + projectId + '/_apis/build/definitions',
-            buildDefinition
-        )
+        return Promise.resolve(buildDefinition)
+
                     
     }
 
