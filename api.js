@@ -29,8 +29,10 @@ module.exports = function(vstsAccount, token) {
     }
 
 
-    vstsApi.postObject = (url, body) => {
+    vstsApi.postObject = (url, body, endpoint) => {
         return new Promise((resolve, reject)=>{
+            if (endpoint) endPoint = endpoint;
+
             var options = { method: 'POST',
                 url: endPoint +  url,
                 headers: {
@@ -47,6 +49,27 @@ module.exports = function(vstsAccount, token) {
             }).auth('',token);
         })
     }
+
+    vstsApi.delObject = (url, endpoint) => {
+        return new Promise((resolve, reject)=>{
+            if (endpoint) endPoint = endpoint;
+
+            var options = { method: 'DELETE',
+                url: endPoint +  url,
+                headers: {
+                    accept: 'application/json;api-version=4.0-preview',
+                    'content-type': 'application/json',
+                    origin: endPoint
+                }
+            };
+            request(options, function (error, response, body) {
+                if (error) reject( new Error(error))
+                else resolve(body)
+            }).auth('',token);
+        })
+    }
+
+
 
     function waitSec(t){
         return (d)=>{
@@ -148,7 +171,7 @@ module.exports = function(vstsAccount, token) {
         .then(o => o.value)
     }
 
-    vstsApi.createReleaseDefinition = (releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseEnvironments, azureServiceEndpointName, user) => { 
+    vstsApi.createReleaseDefinition = (projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseDefinition, azureServiceEndpointName, user, overwrite) => { 
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
@@ -175,10 +198,27 @@ module.exports = function(vstsAccount, token) {
             var queueId = projectQueues.value.filter(q => q.name == queueName)[0].id;
             projectName = project.name;
 
-            return vstsApi._createReleaseDefinition(defaultCollectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments, azureServiceEndpointId, owner)
+            return vstsApi.getReleaseDefinitionsbyName(projectId, releaseDefinition.name)
+            .then(definitions => {
+                if ((definitions.length != 0) && !overwrite) {
+                    return Promise.reject(new Error("The release definition already exists."))
+                }
+
+                if ((definitions.length != 0) && overwrite) {
+                    console.log("Release definition " + releaseDefinition.name + " already exists, deleting...")
+                    return vstsApi.deleteReleaseDefinition(projectId, definitions[0].id)
+                    .then(()=>{
+                        console.log("Recreating release definition " + releaseDefinition.name)
+                        return vstsApi._createReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner)
+                    })
+                }
+
+                return vstsApi._createReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner)
+            })
+
         })
         .catch(e=>{
-            console.error('Couldnt create the release definition: ' + e)
+            console.error('Couldnt create the release definition: ' + e + "\n" + e.stack)
             process.exit(10)
         })
     }
@@ -203,11 +243,22 @@ module.exports = function(vstsAccount, token) {
     }
 
 
-    vstsApi._createReleaseDefinition = (collectionId, releaseDefinitionName, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseEnvironments, azureServiceEndpointId, owner) => {
+    vstsApi.getReleaseDefinitionsbyName = (projectId, releaseDefinitionName) => {
+        return vstsApi.getObject('/'+ projectId +'/_apis/Release/definitions', rmEndPoint)
+        .then((definitions)=>{
+            return definitions.value.filter(r => r.name == releaseDefinitionName);
+        })
+    }
+
+    vstsApi.deleteReleaseDefinition = (projectId, definitionId) => {
+        return vstsApi.delObject('/'+ projectId +'/_apis/Release/definitions/' + definitionId , rmEndPoint)
+    }
+
+    vstsApi._createReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner) => {
         return new Promise((resolve,reject)=>{ 
 
             //overwrite azure service endpoint IDs and vsts queue ID
-            releaseEnvironments[0].deployPhases = releaseEnvironments[0].deployPhases.map((phase)=>{
+            releaseDefinition.environments[0].deployPhases = releaseDefinition.environments[0].deployPhases.map((phase)=>{
                 phase.deploymentInput.queueId = queueId
                 
                 if ((phase["workflowTasks"]) && (azureServiceEndpointId)) {
@@ -227,81 +278,57 @@ module.exports = function(vstsAccount, token) {
                 return phase
             })
 
-            releaseEnvironments[0].owner = owner
-           
-            var rmObj = {
-                owner : owner,
-                "id": 0,
-                "name": releaseDefinitionName,
-                "source": 2,
-                "comment": "",
-                "createdOn": "2018-02-15T16:57:54.742Z",
-                "createdBy": null,
-                "modifiedBy": null,
-                "modifiedOn": "2018-02-15T16:57:54.742Z",
-                "environments": releaseEnvironments,
-                "artifacts": [
-                    {
-                        "type": "Build",
-                        "definitionReference": {
-                            "project": {
-                                "name": projectName,
-                                "id":   projectId
-                            },
-                            "definition": {
-                                "name": buildDefinitionName,
-                                "id": buildDefinitionId
-                            },
-                            "defaultVersionType": {
-                                "name": "Latest",
-                                "id": "latestType"
-                            },
-                            "defaultVersionBranch": {
-                                "name": "",
-                                "id": ""
-                            },
-                            "defaultVersionTags": {
-                                "name": "",
-                                "id": ""
-                            },
-                            "defaultVersionSpecific": {
-                                "name": "",
-                                "id": ""
-                            },
-                            "artifactSourceDefinitionUrl": {
-                              "id": endPoint + "/_permalink/_build/index?collectionId="+ collectionId +"&projectId=" + projectId + "definitionId=" + buildDefinitionId,
-                              "name": ""
-                            },
+            releaseDefinition.environments[0].owner = owner
+            releaseDefinition.owner = owner
+            releaseDefinition.artifacts = [
+                {
+                    "type": "Build",
+                    "definitionReference": {
+                        "project": {
+                            "name": projectName,
+                            "id":   projectId
                         },
-                        "alias": buildDefinitionName,
-                        "isPrimary": true,
-                        "sourceId": projectId + ':3'
-                    }
-                ],
-                "variables": {},
-                "variableGroups": [],
-                "triggers": [],
-                "lastRelease": null,
-                "tags": [],
-                "path": "\\",
-                "properties": {
-                    "DefinitionCreationSource": "ReleaseNew"
-                },
-                "releaseNameFormat": "Release-$(rev:r)",
-                "description": ""
-            }
+                        "definition": {
+                            "name": buildDefinitionName,
+                            "id": buildDefinitionId
+                        },
+                        "defaultVersionType": {
+                            "name": "Latest",
+                            "id": "latestType"
+                        },
+                        "defaultVersionBranch": {
+                            "name": "",
+                            "id": ""
+                        },
+                        "defaultVersionTags": {
+                            "name": "",
+                            "id": ""
+                        },
+                        "defaultVersionSpecific": {
+                            "name": "",
+                            "id": ""
+                        },
+                        "artifactSourceDefinitionUrl": {
+                          "id": endPoint + "/_permalink/_build/index?collectionId="+ collectionId +"&projectId=" + projectId + "definitionId=" + buildDefinitionId,
+                          "name": ""
+                        },
+                    },
+                    "alias": buildDefinitionName,
+                    "isPrimary": true,
+                    "sourceId": projectId + ':3'
+                }
+            ]
 
-             var options = { method: 'POST',
+            var options = { method: 'POST',
                 url: rmEndPoint + '/'+ projectId +'/_apis/Release/definitions',
                 headers: {
                     accept: 'application/json;api-version=4.0-preview',
                     'content-type': 'application/json',
                     origin: endPoint
                 },
-                body: rmObj,
+                body: releaseDefinition,
                 json: true 
             };
-
 
             request(options, function (error, response, body) {
                 if (error) reject( new Error(error))
@@ -431,74 +458,7 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
-    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinitionName, buildProcess)=>{
-
-        if (!buildProcess) {
-            var buildProcess = {
-                "phases": [
-                    {
-                        "steps": [
-                            {
-                                "environment": {},
-                                "enabled": true,
-                                "continueOnError": false,
-                                "alwaysRun": false,
-                                "displayName": "Archive $(Build.BinariesDirectory)",
-                                "timeoutInMinutes": 0,
-                                "condition": "succeeded()",
-                                "task": {
-                                    "id": "d8b84976-e99a-4b86-b885-4849694435b0",
-                                    "versionSpec": "2.*",
-                                    "definitionType": "task"
-                                },
-                                "inputs": {
-                                    "rootFolderOrFile": "$(Build.BinariesDirectory)",
-                                    "includeRootFolder": "true",
-                                    "archiveType": "zip",
-                                    "tarCompression": "gz",
-                                    "archiveFile": "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip",
-                                    "replaceExistingArchive": "true"
-                                }
-                            },
-                            {
-                                "environment": {},
-                                "enabled": true,
-                                "continueOnError": false,
-                                "alwaysRun": false,
-                                "displayName": "Archive $(Build.BinariesDirectory)",
-                                "timeoutInMinutes": 0,
-                                "condition": "succeeded()",
-                                "task": {
-                                    "id": "d8b84976-e99a-4b86-b885-4849694435b0",
-                                    "versionSpec": "2.*",
-                                    "definitionType": "task"
-                                },
-                                "inputs": {
-                                    "rootFolderOrFile": "$(Build.BinariesDirectory)",
-                                    "includeRootFolder": "true",
-                                    "archiveType": "zip",
-                                    "tarCompression": "gz",
-                                    "archiveFile": "$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip",
-                                    "replaceExistingArchive": "true"
-                                }
-                            }
-                        ],
-                        "name": "Phase 1",
-                        "condition": "succeeded()",
-                        "target": {
-                            "executionOptions": {
-                                "type": 0
-                            },
-                            "allowScriptsAuthAccessOption": false,
-                            "type": 1
-                        },
-                        "jobAuthorizationScope": "projectCollection",
-                        "jobCancelTimeoutInMinutes": 1
-                    }
-                ],
-                "type": 1
-            }
-        }
+    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinition, overwrite)=>{
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
@@ -511,21 +471,61 @@ module.exports = function(vstsAccount, token) {
             var queue = projectQueues.value.filter(q => q.name == queueName)[0];
             if (queue) {
                 projectName = project.name;
-                return vstsApi._createBuildDefinition( projectId, projectName, queue.id, queueName ,buildDefinitionName, buildProcess)     
+
+
+                return vstsApi.getBuildDefinitionsbyName(projectId, buildDefinition.name)
+                .then(definitions => {
+                    if (definitions && !overwrite) {
+                        return Promise.reject(new Error("The build definition already exists."))
+                    }
+
+                    if (definitions && overwrite) {
+                        console.log("Build definition " + buildDefinition.name + " already exists, deleting...")
+                        return vstsApi.deleteBuildDefinition(projectId, definitions[0].id)
+                        .then(()=>{
+                            console.log("Recreating build definition " + buildDefinition.name)
+                            return vstsApi._createBuildDefinition( projectId, projectName, queue.id, queueName, buildDefinition)
+                        })
+                    }
+
+                    return vstsApi._createBuildDefinition( projectId, projectName, queue.id, queueName, buildDefinition)
+
+                })
+   
             } else {
                 console.error("The queue " + queueName + " could not be found")
                 process.exit(12)
             }
         })
         .catch(e=>{
-            console.error('Couldnt create the build definition: ' + e)
+            console.error('Couldn\'t create the build definition: ' + e + "\n" + e.stack)
             process.exit(10)
         })
     }
 
-    vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinitionName, buildProcess) => {
+    vstsApi.getBuildDefinitionsbyName = (projectId, buildDefinitionName) => {
+        return vstsApi.getObject('/' + projectId + '/_apis/build/definitions/')
+        .then((definitions)=>{
+            return  definitions.value.filter(d => d.name == buildDefinitionName);
+            // if (def) {
+            //    resolve(def)
+            // } else {
+            //     reject("the definition " + buildDefinitionName + " couldnt be found")
+            // }
+        })
+    }
+
+    vstsApi.deleteBuildDefinition = (projectId, definitionId) => {
+        return vstsApi.delObject('/' + projectId + '/_apis/build/definitions/' + definitionId)
+    }
+
+    vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName) => {
         return new Promise((resolve, reject)=>{
             var url = endPoint + '/' + projectId + '/_apis/build/Definitions';
+
+            if (!buildDefinitionName) {
+                buildDefinitionName = buildDefinition.name;
+            }
 
             var queue =  {
                 _links: {
@@ -543,90 +543,29 @@ module.exports = function(vstsAccount, token) {
                 }
             }
 
-            var body = {
-                options: [{
-                    enabled: false,
-                    definition: {
-                        id: '5d58cc01-7c75-450c-be18-a388ddb129ec'
-                    },
-                    inputs: {
-                        branchFilters: '["+refs/heads/*"]',
-                        additionalFields: '{}'
-                    }
-                }, {
-                    enabled: false,
-                    definition: {
-                        id: 'a9db38f9-9fdc-478c-b0f9-464221e58316'
-                    },
-                    inputs: {
-                        workItemType: '1844284',
-                        assignToRequestor: 'true',
-                        additionalFields: '{}'
-                    }
-                }, {
-                    enabled: false,
-                    definition: {
-                        id: '57578776-4c22-4526-aeb0-86b6da17ee9c'
-                    },
-                    inputs: {}
-                }],
-                variables: {
-                    'system.debug': {
-                        value: 'false',
-                        allowOverride: true
-                    }
-                },
-                retentionRules: [{
-                    branches: ['+refs/heads/*'],
-                    artifacts: [],
-                    artifactTypesToDelete: ['FilePath', 'SymbolStore'],
-                    daysToKeep: 10,
-                    minimumToKeep: 1,
-                    deleteBuildRecord: true,
-                    deleteTestResults: true
-                }],
+            buildDefinition.queue = queue
+            buildDefinition.repository = {
                 properties: {
-                    source: {
-                        '$type': 'System.String',
-                        '$value': 'projecthome'
-                    }
+                    cleanOptions: '0',
+                    labelSources: '0',
+                    labelSourcesFormat: '$(build.buildNumber)',
+                    reportBuildStatus: 'true',
+                    gitLfsSupport: 'false',
+                    skipSyncSource: 'false',
+                    checkoutNestedSubmodules: 'false',
+                    fetchDepth: '0'
                 },
-                tags: [],
-                jobAuthorizationScope: 'projectCollection',
-                jobTimeoutInMinutes: 60,
-                jobCancelTimeoutInMinutes: 5,
-                process: buildProcess,
-                repository: {
-                    properties: {
-                        cleanOptions: '0',
-                        labelSources: '0',
-                        labelSourcesFormat: '$(build.buildNumber)',
-                        reportBuildStatus: 'true',
-                        gitLfsSupport: 'false',
-                        skipSyncSource: 'false',
-                        checkoutNestedSubmodules: 'false',
-                        fetchDepth: '0'
-                    },
-                    id: '38966012-3a8a-4377-9da4-89cf0116d369',
-                    type: 'TfsGit',
-                    name: projectName,
-                    url: endPoint + '/_git/' + projectName ,
-                    defaultBranch: 'refs/heads/master',
-                    clean: 'false',
-                    checkoutSubmodules: false
-                },
-                processParameters: {},
-                quality: 'definition',
-                drafts: [],
-                queue: queue,
-                id: 6,
-                name: '' + buildDefinitionName,
-                url: url,
-                path: '\\',
-                type: 'build',
-                queueStatus: 'enabled'
-            }
+                //id: '38966012-3a8a-4377-9da4-89cf0116d369',
+                type: 'TfsGit',
+                name: projectName,
+                url: endPoint + '/_git/' + projectName ,
+                defaultBranch: 'refs/heads/master',
+                clean: 'false',
+                checkoutSubmodules: false
+            };
 
+            delete buildDefinition.project;
+            delete buildDefinition._links;
 
             var options = {
                 method: 'POST',
@@ -637,14 +576,21 @@ module.exports = function(vstsAccount, token) {
                     'content-type': 'application/json',
                     origin: endPoint
                 },
-                body: body,
+                body: buildDefinition,
                 json: true
-             }                
+             }   
 
             request(options, function (error, response, body) {
-                if (error) reject( new Error(error))
-                else resolve(body)
+                if (error) return reject( new Error(error))
+
+                if (response.statusCode == 400) { 
+                    body = JSON.stringify(body,null,2)
+                    return reject( new Error(body) ) 
+                } 
+
+                resolve(body)  
             }).auth('',token);
+                    
 
         })
     }
