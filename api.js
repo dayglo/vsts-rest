@@ -7,69 +7,87 @@ module.exports = function(vstsAccount, token) {
     var endPoint   = 'https://'+ vstsAccount +'.visualstudio.com'
     var rmEndPoint = 'https://'+ vstsAccount +'.vsrm.visualstudio.com'
 
-    vstsApi.getObject = (url, endpoint) => {
-        return new Promise((resolve, reject)=>{
-            if (endpoint) endPoint = endpoint;
+    var headers = {
+        accept: 'application/json;api-version=4.0-preview',
+        'content-type': 'application/json',
+        origin: endPoint,
+        json:true
+    }
 
-            var options = { method: 'GET',
-                url: endPoint +  url,
-                headers: {
-                    accept: 'application/json;api-version=4.0-preview',
-                    'content-type': 'application/json',
-                    origin: endPoint
-                },
-                json: true 
-            };
+    function checkResponse(resolve,reject,predicate,resultExtractor){
+        return (error, response, body) => {
+            if (!predicate)         predicate       = (      ) => {return true}
+            if (!resultExtractor)   resultExtractor = (result) => {return result}
 
-            request(options, function (error, response, body) {
-                if (error) reject( new Error(error))
-                else resolve(body)
-            }).auth('',token);
-        })
+            if (error) return reject( new Error(error));
+
+            var result = {
+                response:response,
+                body:body
+            }
+
+            if (predicate(result)) {
+                resolve(resultExtractor(body))
+            } else {
+                reject( new Error("The request's result was not as expected: " + JSON.stringify(result,null,2)))
+            }
+        }
     }
 
 
-    vstsApi.postObject = (url, body, endpoint) => {
+
+    vstsApi.getObject = (url, endpoint, predicate, resultExtractor) => {
+        return new Promise((resolve, reject)=>{
+            if (endpoint) endPoint = endpoint;
+            
+            if (!predicate) {
+                var predicate = (result) => {
+                    return (result.response.statusCode == 200)
+                }
+            }
+
+            var options = { 
+                method: 'GET',
+                url: endPoint +  url,
+                headers: headers,
+                json: true 
+            };
+
+            request(options, checkResponse(resolve, reject, predicate, resultExtractor)).auth('',token);
+        })
+    }
+
+    vstsApi.postObject = (url, body, endpoint, predicate, resultExtractor) => {
         return new Promise((resolve, reject)=>{
             if (endpoint) endPoint = endpoint;
 
             var options = { method: 'POST',
                 url: endPoint +  url,
-                headers: {
-                    accept: 'application/json;api-version=4.0-preview',
-                    'content-type': 'application/json',
-                    origin: endPoint
-                },
+                headers: headers,
                 json: true,
                 body: body
             };
-            request(options, function (error, response, body) {
-                if (error) reject( new Error(error))
-                else resolve(body)
-            }).auth('',token);
+            request(options, checkResponse(resolve, reject, predicate, resultExtractor)).auth('',token);
         })
     }
 
-    vstsApi.delObject = (url, endpoint) => {
+    vstsApi.delObject = (url, endpoint, predicate) => {
         return new Promise((resolve, reject)=>{
             if (endpoint) endPoint = endpoint;
 
+            if (!predicate) {
+                var predicate = (result) => {
+                    return (result.response.statusCode == 204)
+                }
+            }
+
             var options = { method: 'DELETE',
                 url: endPoint +  url,
-                headers: {
-                    accept: 'application/json;api-version=4.0-preview',
-                    'content-type': 'application/json',
-                    origin: endPoint
-                }
+                headers: headers
             };
-            request(options, function (error, response, body) {
-                if (error) reject( new Error(error))
-                else resolve(body)
-            }).auth('',token);
+            request(options, checkResponse(resolve, reject, predicate)).auth('',token);
         })
     }
-
-
 
     function waitSec(t){
         return (d)=>{
@@ -224,22 +242,12 @@ module.exports = function(vstsAccount, token) {
     }
 
     vstsApi.getDefaultCollection = () => {
-        return new Promise((resolve,reject)=>{ 
-            var options = { method: 'GET',
-                url: endPoint +  '/_apis/projectcollections',
-                headers: {
-                    accept: 'application/json',
-                    'content-type': 'application/json',
-                    origin: endPoint
-                },
-                json: true 
-            };
-
-            request(options, function (error, response, body) {
-                if (error) reject( new Error(error))
-                else resolve(body.value[0])
-            }).auth('',token);
-        })
+        return vstsApi.getObject(
+            '/_apis/projectcollections',
+            null,
+            null,
+            (projectCollection) => {return projectCollection.value[0]} 
+        )
     }
 
 
@@ -319,21 +327,12 @@ module.exports = function(vstsAccount, token) {
                 }
             ]
 
-            var options = { method: 'POST',
-                url: rmEndPoint + '/'+ projectId +'/_apis/Release/definitions',
-                headers: {
-                    accept: 'application/json;api-version=4.0-preview',
-                    'content-type': 'application/json',
-                    origin: endPoint
-                },
-                body: releaseDefinition,
-                json: true 
-            };
-
-            request(options, function (error, response, body) {
-                if (error) reject( new Error(error))
-                else resolve(body)
-            }).auth('',token);
+            vstsApi.postObject(
+                '/'+ projectId +'/_apis/Release/definitions',
+                releaseDefinition,
+                rmEndPoint
+            )
+            .then(resolve,reject)
         })
 
     }
@@ -351,32 +350,18 @@ module.exports = function(vstsAccount, token) {
     }
 
     vstsApi._createProject = (projectName) => {
-        return new Promise((resolve, reject)=>{
-
-            var options = { method: 'POST',
-                url: endPoint + '/_api/_project/CreateProject',
-                headers: {
-                    accept: 'application/json;api-version=4.0-preview',
-                    'content-type': 'application/json',
-                    origin: endPoint
-                },
-                body: { 
-                    projectName: projectName,
-                    projectDescription: '',
-                    processTemplateTypeId: 'adcc42ab-9882-485e-a3ed-7678f01f66bc',
-                    //collectionId: 'ba47a542-7971-4401-8d4e-aaa5f04d9ec6',
-                    source: 'NewProjectCreation:',
-                    projectData: '{"VersionControlOption":"Git","ProjectVisibilityOption":null}' 
-                },
-                json: true 
-            };
-
-            request(options, function (error, response, body) {
-                console.log('creating project ' + projectName)
-                if (error) reject( new Error(error))
-                else resolve(body)
-            }).auth('',token);
-        })
+        return vstsApi.postObject(
+            '/_api/_project/CreateProject',
+            { 
+                projectName: projectName,
+                projectDescription: '',
+                processTemplateTypeId: 'adcc42ab-9882-485e-a3ed-7678f01f66bc',
+                //collectionId: 'ba47a542-7971-4401-8d4e-aaa5f04d9ec6',
+                source: 'NewProjectCreation:',
+                projectData: '{"VersionControlOption":"Git","ProjectVisibilityOption":null}' 
+            },
+            endPoint,
+        ).then(resolve,reject)
     }
 
     vstsApi.startBuild = (projectId, buildId) => {
@@ -413,28 +398,16 @@ module.exports = function(vstsAccount, token) {
     }
 
     vstsApi.getProjectByName = (projectName) => {
-        return new Promise((resolve, reject)=>{
-            vstsApi.getObject('/_apis/projects/')
-            .then((projectData)=>{
-                var result = null
-                var project = projectData.value.filter(p => p.name == projectName )
-                if (project) {
-                    result = project[0]
-                    resolve(result)
-                } else {
-                    reject("the project " + projectName +" couldnt be found")
-                }
-            })
-            .then(resolve,reject)
-        })
+        return vstsApi.getObject(
+            '/_apis/projects/',
+            null,
+            (httpResult)=>{
+                var project = httpResult.body.value.filter(p => p.name == projectName )
+                return project.length
+            },
+            body => body.value[0]
+        )
     }
-
-    // vstsApi.getProjectId = (projectName) => {
-    //     return vstsApi.getObject('/_apis/projects/')
-    //     .then((projectData)=>{
-    //         return projectData.value.filter( p => p.name == projectName )[0].id
-    //     })
-    // }
 
     vstsApi.deleteProject = (projectId) => {
         return new Promise((resolve, reject)=>{
@@ -504,15 +477,17 @@ module.exports = function(vstsAccount, token) {
     }
 
     vstsApi.getBuildDefinitionsbyName = (projectId, buildDefinitionName) => {
-        return vstsApi.getObject('/' + projectId + '/_apis/build/definitions/')
-        .then((definitions)=>{
-            return  definitions.value.filter(d => d.name == buildDefinitionName);
-            // if (def) {
-            //    resolve(def)
-            // } else {
-            //     reject("the definition " + buildDefinitionName + " couldnt be found")
-            // }
-        })
+        return vstsApi.getObject(
+            '/' + projectId + '/_apis/build/definitions/',
+            null,
+            (httpResult) => {
+                var definitions = httpResult.body.value.filter(d => d.name == buildDefinitionName)
+                return definitions.length
+            },
+            (body) => {
+                return body.value.filter(d => d.name == buildDefinitionName)
+            },
+        )
     }
 
     vstsApi.deleteBuildDefinition = (projectId, definitionId) => {
