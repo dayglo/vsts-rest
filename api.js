@@ -11,13 +11,12 @@ module.exports = function(vstsAccount, token) {
         accept: 'application/json;api-version=4.0-preview',
         'content-type': 'application/json',
         origin: endPoint,
-        json:true
     }
 
     function checkResponse(resolve,reject,predicate,resultExtractor){
         return (error, response, body) => {
-            if (!predicate)         predicate       = (      ) => {return true}
-            if (!resultExtractor)   resultExtractor = (result) => {return result}
+            if (!predicate)         predicate       = () => {return true}
+            if (!resultExtractor)   resultExtractor = x => x
 
             if (error) return reject( new Error(error));
 
@@ -405,7 +404,10 @@ module.exports = function(vstsAccount, token) {
                 var project = httpResult.body.value.filter(p => p.name == projectName )
                 return project.length
             },
-            body => body.value[0]
+            (body)=>{
+                var project = body.value.filter(p => p.name == projectName )
+                return project[0]
+            }
         )
     }
 
@@ -480,12 +482,9 @@ module.exports = function(vstsAccount, token) {
         return vstsApi.getObject(
             '/' + projectId + '/_apis/build/definitions/',
             null,
-            (httpResult) => {
-                var definitions = httpResult.body.value.filter(d => d.name == buildDefinitionName)
-                return definitions.length
-            },
+            null,
             (body) => {
-                return body.value.filter(d => d.name == buildDefinitionName)
+                return body.value.filter(x => x.name == buildDefinitionName);
             },
         )
     }
