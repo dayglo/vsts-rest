@@ -60,6 +60,12 @@ module.exports = function(vstsAccount, token) {
         return new Promise((resolve, reject)=>{
             if (endpoint) endPoint = endpoint;
 
+            if (!predicate) {
+                var predicate = (result) => {
+                    return (result.response.statusCode == 200)
+                }
+            }
+
             var options = { method: 'POST',
                 url: endPoint +  url,
                 headers: headers,
@@ -364,32 +370,16 @@ module.exports = function(vstsAccount, token) {
     }
 
     vstsApi.startBuild = (projectId, buildId) => {
-        return new Promise((resolve, reject)=>{
-            var body = {
+        return vstsApi.postObject(
+            '/DefaultCollection/' + projectId + '/_apis/build/builds',
+            {
                 "definition": {
                     "id": buildId
                 },
                 "sourceBranch": "refs/heads/master",
                 "parameters": "{\"system.debug\":\"true\",\"BuildConfiguration\":\"debug\",\"BuildPlatform\":\"x64\"}"
             }
-
-            var options = { method: 'POST',
-                url: endPoint + '/DefaultCollection/' + projectId + '/_apis/build/builds',
-                headers: {
-                    accept: 'application/json;api-version=4.0-preview',
-                    'content-type': 'application/json',
-                    origin: endPoint
-                },
-                body: body,
-                json: true 
-            };
-
-            request(options, function (error, response, body) {
-                if (error) reject( new Error(error))
-                else resolve(body)
-            }).auth('',token);
-        })
-
+        )
     }
 
     vstsApi.getProject = (project) => {
@@ -412,25 +402,7 @@ module.exports = function(vstsAccount, token) {
     }
 
     vstsApi.deleteProject = (projectId) => {
-        return new Promise((resolve, reject)=>{
-            var options = {
-                method: 'DELETE',
-                url: endPoint + '/_apis/projects/' + projectId,
-                headers: {
-                    'accept-language': 'en-US,en;q=0.9',
-                    accept: 'application/json;api-version=4.0-preview',
-                    'content-type': 'application/json'
-                    // origin: endPoint
-                },
-                json: true
-             }                
-
-            request(options, function (error, response, body) {
-                if (error) reject( new Error(error))
-                else resolve(body)
-            }).auth('',token);
-
-        })
+        return vstsApi.delObject('/_apis/projects/' + projectId)
     }
 
     vstsApi.createBuildDefinition = (projectId, queueName, buildDefinition, overwrite)=>{
@@ -494,79 +466,56 @@ module.exports = function(vstsAccount, token) {
     }
 
     vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName) => {
-        return new Promise((resolve, reject)=>{
-            var url = endPoint + '/' + projectId + '/_apis/build/Definitions';
 
-            if (!buildDefinitionName) {
-                buildDefinitionName = buildDefinition.name;
-            }
+        if (!buildDefinitionName) {
+            buildDefinitionName = buildDefinition.name;
+        }
 
-            var queue =  {
-                _links: {
-                    self: {
-                        href: endPoint + '/_apis/build/Queues/' + queueId
-                    }
-                },
-                id: queueId,
-                name: queueName,
-                url: endPoint + '/_apis/build/Queues/' + queueId,
-                pool: {
-                    id: 4,
-                    name: queueName,
-                    isHosted: true
+        var queue =  {
+            _links: {
+                self: {
+                    href: endPoint + '/_apis/build/Queues/' + queueId
                 }
+            },
+            id: queueId,
+            name: queueName,
+            url: endPoint + '/_apis/build/Queues/' + queueId,
+            pool: {
+                id: 4,
+                name: queueName,
+                isHosted: true
             }
+        }
 
-            buildDefinition.queue = queue
-            buildDefinition.repository = {
-                properties: {
-                    cleanOptions: '0',
-                    labelSources: '0',
-                    labelSourcesFormat: '$(build.buildNumber)',
-                    reportBuildStatus: 'true',
-                    gitLfsSupport: 'false',
-                    skipSyncSource: 'false',
-                    checkoutNestedSubmodules: 'false',
-                    fetchDepth: '0'
-                },
-                //id: '38966012-3a8a-4377-9da4-89cf0116d369',
-                type: 'TfsGit',
-                name: projectName,
-                url: endPoint + '/_git/' + projectName ,
-                defaultBranch: 'refs/heads/master',
-                clean: 'false',
-                checkoutSubmodules: false
-            };
+        buildDefinition.queue = queue
+        buildDefinition.repository = {
+            properties: {
+                cleanOptions: '0',
+                labelSources: '0',
+                labelSourcesFormat: '$(build.buildNumber)',
+                reportBuildStatus: 'true',
+                gitLfsSupport: 'false',
+                skipSyncSource: 'false',
+                checkoutNestedSubmodules: 'false',
+                fetchDepth: '0'
+            },
+            //id: '38966012-3a8a-4377-9da4-89cf0116d369',
+            type: 'TfsGit',
+            name: projectName,
+            url: endPoint + '/_git/' + projectName ,
+            defaultBranch: 'refs/heads/master',
+            clean: 'false',
+            checkoutSubmodules: false
+        };
 
-            delete buildDefinition.project;
-            delete buildDefinition._links;
+        delete buildDefinition.project;
+        delete buildDefinition._links;
 
-            var options = {
-                method: 'POST',
-                url: endPoint + '/' + projectId + '/_apis/build/definitions',
-                headers: {
-                    'accept-language': 'en-US,en;q=0.9',
-                    accept: 'application/json;api-version=4.0-preview',
-                    'content-type': 'application/json',
-                    origin: endPoint
-                },
-                body: buildDefinition,
-                json: true
-             }   
-
-            request(options, function (error, response, body) {
-                if (error) return reject( new Error(error))
-
-                if (response.statusCode == 400) { 
-                    body = JSON.stringify(body,null,2)
-                    return reject( new Error(body) ) 
-                } 
-
-                resolve(body)  
-            }).auth('',token);
+        return vstsApi.postObject(
+            '/' + projectId + '/_apis/build/definitions',
+            buildDefinition
+        )
                     
-
-        })
     }
 
     return vstsApi

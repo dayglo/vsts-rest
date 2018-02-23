@@ -80,3 +80,16 @@ vsts-import YourProjectName -g https://bitbucket.org/automationlogic/demoapplica
 If all goes well, A build definition and release definition will be created. In addition, the specified repo will be pushed to your project, and a build will be initiated.
 
 
+Command line options:
+```
+    -V, --version                                    output the version number
+    -g, --gitrepo [path to git repo]                 Path to the git repo to deploy. Default is the current directory. (default: ./)
+    -b, --build [path to build definition json]      Include release steps in the new release definition [build] (default: ./build.json)
+    -r, --release [path to release definition json]  Include build steps in the new build definition [release] (default: ./release.json)
+    -a, --buildagent [build agent queue name]        Agent type to use for build (default: Hosted VS2017)
+    -A, --releaseagent [release agent queue name]    Agent type to use for release (default: Hosted VS2017)
+    -h, --help                                       output usage information
+
+```
+
+

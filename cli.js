@@ -80,16 +80,16 @@ var git = (localPath, command, stdout, stderr) =>{
 
         var pullRepoProcess = spawn('git' , command , {cwd:localPath});
 
-        pullRepoProcess.stdout.setEncoding('utf-8');
-        pullRepoProcess.stderr.setEncoding('utf-8');
+        // pullRepoProcess.stdout.setEncoding('utf-8');
+        // pullRepoProcess.stderr.setEncoding('utf-8');
 
-        pullRepoProcess.stdout.on('data', stdout);
-        pullRepoProcess.stderr.on('data', stderr);
+        // pullRepoProcess.stdout.on('data', stdout);
+        // pullRepoProcess.stderr.on('data', stderr);
 
         pullRepoProcess.on('error', stdout);
 
         pullRepoProcess.on('close', (code) => {
-            stdout(`command "git ${command.join(' ')}" exited with code ${code}`);
+            //stdout(`command "git ${command.join(' ')}" exited with code ${code}`);
             if (code == 0 ){
                 resolve(code)
             } else {
