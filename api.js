@@ -1,5 +1,4 @@
 var request = require("request");
-var updateBuildDefinitionObject = require('./objects/updatebuilddef.json')
 var _ = require('lodash');
 
 
@@ -229,12 +228,8 @@ module.exports = function(vstsAccount, token) {
                 }
 
                 if ((definitions.length != 0) && overwrite) {
-                    console.log("Release definition " + releaseDefinition.name + " already exists, deleting...")
-                    return vstsApi.deleteReleaseDefinition(projectId, definitions[0].id)
-                    .then(()=>{
-                        console.log("Recreating release definition " + releaseDefinition.name)
-                        return vstsApi._createReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables)
-                    })
+                    console.log("Release definition " + releaseDefinition.name + " already exists, updating...")
+                    return vstsApi.updateReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, definitions[0], azureServiceEndpointId, owner, releaseVariables)
                 }
 
                 return vstsApi._createReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables)
@@ -256,7 +251,6 @@ module.exports = function(vstsAccount, token) {
         )
     }
 
-
     vstsApi.getReleaseDefinitionsbyName = (projectId, releaseDefinitionName) => {
         return vstsApi.getObject('/'+ projectId +'/_apis/Release/definitions', rmEndPoint)
         .then((definitions)=>{
@@ -268,15 +262,49 @@ module.exports = function(vstsAccount, token) {
         return vstsApi.delObject('/'+ projectId +'/_apis/Release/definitions/' + definitionId , rmEndPoint)
     }
 
-    vstsApi._createReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables) => {
-        return new Promise((resolve,reject)=>{ 
+    vstsApi.updateReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, definitionIdProperties, azureServiceEndpointId, owner, releaseVariables)  => {
 
-            //overwrite azure service endpoint IDs and vsts queue ID
-            releaseDefinition.environments[0].deployPhases = releaseDefinition.environments[0].deployPhases.map((phase)=>{
+        releaseDefinition = vstsApi._assembleReleaseDefinition(collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables)
+        _.merge(releaseDefinition, definitionIdProperties)
+
+        console.log(
+            JSON.stringify(releaseDefinition,null,2)
+        )
+        return vstsApi.putObject(
+            '/'+ projectId +'/_apis/Release/definitions/' + releaseDefinition.id,
+            releaseDefinition,
+            rmEndPoint
+        )
+    }
+
+    vstsApi._assembleReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables) => {
+        
+
+        // set release scope variables
+        Object.keys(releaseVariables.release).forEach(function(key) {
+            releaseDefinition.variables[key] = {value: releaseVariables.release[key]} 
+        });
+
+        releaseDefinition.owner = owner
+
+        releaseDefinition.environments = _.map(releaseDefinition.environments,(env) => {
+
+            env.id = -1
+            env.owner = owner
+            
+            // set environment scope variables
+            if (releaseVariables.environments[env.name]) {
+                Object.keys(releaseVariables.environments[env.name]).forEach(function(key) {
+                    env.variables[key] = {value: releaseVariables.environments[env.name][key]} 
+                });
+            }
+
+            // overwrite service endpoints and queues in each environment.
+            env.deployPhases = env.deployPhases.map((phase)=>{
                 phase.deploymentInput.queueId = queueId
-                
+            
                 if ((phase["workflowTasks"]) && (azureServiceEndpointId)) {
-                    debugger
+
                     phase.workflowTasks = phase.workflowTasks.map(task=>{
                         if (task["inputs"]["ConnectedServiceName"]) {
                             task.inputs.ConnectedServiceName = azureServiceEndpointId
@@ -286,57 +314,60 @@ module.exports = function(vstsAccount, token) {
                         }
                         return task
                     })
-                    debugger
                 }
-
                 return phase
             })
 
-            Object.keys(releaseVariables).forEach(function(key) {
-                releaseDefinition.environments[0].variables[key] = {value: releaseVariables[key]} 
-            });
+            return env
+        })
 
-            releaseDefinition.environments[0].owner = owner
-            releaseDefinition.owner = owner
-            releaseDefinition.artifacts = [
-                {
-                    "type": "Build",
-                    "definitionReference": {
-                        "project": {
-                            "name": projectName,
-                            "id":   projectId
-                        },
-                        "definition": {
-                            "name": buildDefinitionName,
-                            "id": buildDefinitionId
-                        },
-                        "defaultVersionType": {
-                            "name": "Latest",
-                            "id": "latestType"
-                        },
-                        "defaultVersionBranch": {
-                            "name": "",
-                            "id": ""
-                        },
-                        "defaultVersionTags": {
-                            "name": "",
-                            "id": ""
-                        },
-                        "defaultVersionSpecific": {
-                            "name": "",
-                            "id": ""
-                        },
-                        "artifactSourceDefinitionUrl": {
-                          "id": endPoint + "/_permalink/_build/index?collectionId="+ collectionId +"&projectId=" + projectId + "definitionId=" + buildDefinitionId,
-                          "name": ""
-                        },
+        releaseDefinition.artifacts = [
+            {
+                "type": "Build",
+                "definitionReference": {
+                    "project": {
+                        "name": projectName,
+                        "id":   projectId
                     },
-                    "alias": buildDefinitionName,
-                    "isPrimary": true,
-                    "sourceId": projectId + ':3'
-                }
-            ]
+                    "definition": {
+                        "name": buildDefinitionName,
+                        "id": buildDefinitionId
+                    },
+                    "defaultVersionType": {
+                        "name": "Latest",
+                        "id": "latestType"
+                    },
+                    "defaultVersionBranch": {
+                        "name": "",
+                        "id": ""
+                    },
+                    "defaultVersionTags": {
+                        "name": "",
+                        "id": ""
+                    },
+                    "defaultVersionSpecific": {
+                        "name": "",
+                        "id": ""
+                    },
+                    "artifactSourceDefinitionUrl": {
+                      "id": endPoint + "/_permalink/_build/index?collectionId="+ collectionId +"&projectId=" + projectId + "definitionId=" + buildDefinitionId,
+                      "name": ""
+                    },
+                },
+                "alias": buildDefinitionName,
+                "isPrimary": true,
+                "sourceId": projectId + ':3'
+            }
+        ]
 
+        return releaseDefinition
+    }
+
+    vstsApi._createReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables) => {
+        return new Promise((resolve,reject)=>{ 
+
+            releaseDefinition = vstsApi._assembleReleaseDefinition(collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables)
+           
             vstsApi.postObject(
                 '/'+ projectId +'/_apis/Release/definitions',
                 releaseDefinition,
@@ -344,7 +375,6 @@ module.exports = function(vstsAccount, token) {
             )
             .then(resolve,reject)
         })
-
     }
 
     vstsApi.createProject = (projectName) => {
@@ -371,7 +401,7 @@ module.exports = function(vstsAccount, token) {
                 projectData: '{"VersionControlOption":"Git","ProjectVisibilityOption":null}' 
             },
             endPoint,
-        ).then(resolve,reject)
+        )
     }
 
     vstsApi.startBuild = (projectId, buildId) => {
@@ -538,6 +568,25 @@ module.exports = function(vstsAccount, token) {
                 isHosted: true
             }
         }
+
+        buildDefinition.repository = {
+            properties: {
+                cleanOptions: '0',
+                labelSources: '0',
+                labelSourcesFormat: '$(build.buildNumber)',
+                reportBuildStatus: 'true',
+                gitLfsSupport: 'false',
+                skipSyncSource: 'false',
+                checkoutNestedSubmodules: 'false',
+                fetchDepth: '0'
+            },
+            type: 'TfsGit',
+            name: projectName,
+            url: endPoint + '/_git/' + projectName ,
+            defaultBranch: 'refs/heads/master',
+            clean: 'false',
+            checkoutSubmodules: false
+        };
 
         buildDefinition.queue = queue
         

@@ -25,7 +25,7 @@ program
     .option('-r, --release [path to release definition json]', 'Include build steps in the new build definition [release]', './release.json')
     .option('-a, --buildagent [build agent queue name]', 'Agent type to use for build', 'Hosted VS2017')
     .option('-A, --releaseagent [release agent queue name]', 'Agent type to use for release', 'Hosted VS2017')  
-    .option('-v, --var [key=value]', 'override variables in your release definition' , collect, [])
+    .option('-v, --var [release_env_name:variable=value]', 'override variables in your release definition.' , collect, [])
 
     .action((ProjectName)=>{projectName = ProjectName})
     .parse(process.argv);
@@ -35,11 +35,27 @@ var buildFile = program.build;
 var releaseFile = program.release;
 var buildAgent = program.buildagent;
 var releaseAgent = program.releaseagent;
-var releaseVariables = program.var.reduce((acc,i) => {
+
+var releaseVariables = {
+    release: {},
+    environments: {}
+}
+
+releaseVariables = program.var.reduce((acc,i) => {
     var [key,value] = i.split('=')
-    acc[key] = value
+    
+    if (key.indexOf(":") == -1) { 
+        acc.release[key] = value
+    } else {
+        [env,key] = key.split(':')
+        if (!acc.environments[env]) {
+            acc.environments[env] = {}
+        }
+        acc.environments[env][key] = value
+    }
+    
     return acc
-},{})
+},releaseVariables)
 
 if (!process.env.VSTS_ACCOUNT)           {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
 if (!process.env.VSTS_PAT)               {console.log("Env var VSTS_PAT is not set. You need to generate one form the VSTS UI. Make sure it has access to the correct projects.") ; process.exit(1)}
@@ -53,12 +69,10 @@ var vstsApi = new VstsApi(vstsAccount,token);
 
 
 if (!projectName) projectName = require("os").userInfo().username + '-' + timeStamp;
-// var buildDefinitionName = "Imported Build " + timeStamp
-// var releaseDefinitionName = "Imported Release " + timeStamp
-console.log('Project name:         ' + chalk.blue(projectName))
-// console.log('Build definition:     ' + chalk.magenta(buildDefinitionName))
-// console.log('Release definition:   ' + chalk.green(releaseDefinitionName))
-console.log('Build agent:   ' + chalk.yellow(buildAgent) + ' Release agent:   ' + chalk.yellow(releaseAgent))
+
+console.log('Project name:      ' + chalk.blue(projectName))
+console.log('Build agent:       ' + chalk.yellow(buildAgent)) 
+console.log('Release agent:     ' + chalk.yellow(releaseAgent))
 
 
 

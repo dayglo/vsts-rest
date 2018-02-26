@@ -3,6 +3,7 @@ node $* cli.js GeorgeTestProject3 \
 	-b ../vsts-definitions/pipelines/nodejs-vmscaleset/buildProcess.json \
 	-r ../vsts-definitions/pipelines/nodejs-vmscaleset/releaseProcess-deploy.json \
 	--releaseagent 'Hosted Linux Preview' \
-	-v applicationName=gcproject \
-	-v resourceGroup=gc-resource-group \
-	-v databaseName=gcdatabase
+	-v DEV:applicationName=gcproject \
+	-v DEV:resourceGroup=gc-resource-group \
+	-v DEV:databaseName=gcdatabase \
+	-v newVar=waaaat
