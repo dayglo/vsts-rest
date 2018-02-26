@@ -1,4 +1,7 @@
 var request = require("request");
+var updateBuildDefinitionObject = require('./objects/updatebuilddef.json')
+var _ = require('lodash');
+
 
 module.exports = function(vstsAccount, token) {
 
@@ -290,7 +293,7 @@ module.exports = function(vstsAccount, token) {
             })
 
             Object.keys(releaseVariables).forEach(function(key) {
-                releaseDefinition.environments[0].variables[key] = releaseVariables[key] 
+                releaseDefinition.environments[0].variables[key] = {value: releaseVariables[key]} 
             });
 
             releaseDefinition.environments[0].owner = owner
@@ -424,19 +427,14 @@ module.exports = function(vstsAccount, token) {
 
                 return vstsApi.getBuildDefinitionsbyName(projectId, buildDefinition.name)
                 .then(definitions => {
-                    if (definitions && !overwrite) {
+                    if ((definitions["length"]) && !overwrite) {
                         return Promise.reject(new Error("The build definition already exists."))
                     }
 
-                    if (definitions && overwrite) {
+                    if ((definitions["length"]) && overwrite) {
                         console.log("Build definition " + buildDefinition.name + " already exists, updating...")
-                        return vstsApi.getBuildDefinition(projectId, definitions[0].id)
-                        .then((oldBuildDefinition)=>{
-                            return vstsApi._updateBuildDefinition( projectId, projectName, queue.id, queueName, buildDefinition, buildDefinition.name , oldBuildDefinition.id)
-                        })
-                        
+                        return vstsApi._updateBuildDefinition(projectId, projectName, buildDefinition, definitions[0])  
                     }
-
                     return vstsApi._createBuildDefinition( projectId, projectName, queue.id, queueName, buildDefinition , buildDefinition.name)
 
                 })
@@ -452,18 +450,34 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
-    vstsApi._updateBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName, buildDefinitionId)  => {
-        return vstsApi._assembleBuildDefinition(projectId, projectName, queueId, queueName, buildDefinition, buildDefinition.name, buildDefinitionId)
-        .then(buildDefinition => {
-            return vstsApi.putObject(
-                '/' + projectId + '/_apis/build/definitions/' + buildDefinitionId,
-                buildDefinition,
-                null ,
-                null ,
-                null ,
-                "application/json;api-version=4.1-preview.6;excludeUrls=true"
-            )
-        })
+    vstsApi._updateBuildDefinition = (projectId, projectName, buildDefinition, definitionIdProperties)  => {
+
+         _.merge(buildDefinition, definitionIdProperties)
+
+        buildDefinition.repository = {
+            properties: {
+                cleanOptions: '0',
+                labelSources: '0',
+                labelSourcesFormat: '$(build.buildNumber)',
+                reportBuildStatus: 'true',
+                gitLfsSupport: 'false',
+                skipSyncSource: 'false',
+                checkoutNestedSubmodules: 'false',
+                fetchDepth: '0'
+            },
+            type: 'TfsGit',
+            name: projectName,
+            url: endPoint + '/_git/' + projectName ,
+            defaultBranch: 'refs/heads/master',
+            clean: 'false',
+            checkoutSubmodules: false
+        };
+
+        return vstsApi.putObject(
+            '/' + projectId + '/_apis/build/definitions/' + buildDefinition.id,
+            buildDefinition
+        )
+
     }
 
     vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName)  => {
@@ -526,25 +540,7 @@ module.exports = function(vstsAccount, token) {
         }
 
         buildDefinition.queue = queue
-        buildDefinition.repository = {
-            properties: {
-                cleanOptions: '0',
-                labelSources: '0',
-                labelSourcesFormat: '$(build.buildNumber)',
-                reportBuildStatus: 'true',
-                gitLfsSupport: 'false',
-                skipSyncSource: 'false',
-                checkoutNestedSubmodules: 'false',
-                fetchDepth: '0'
-            },
-            //id: '38966012-3a8a-4377-9da4-89cf0116d369',
-            type: 'TfsGit',
-            name: projectName,
-            url: endPoint + '/_git/' + projectName ,
-            defaultBranch: 'refs/heads/master',
-            clean: 'false',
-            checkoutSubmodules: false
-        };
+        
 
         delete buildDefinition.project;
         delete buildDefinition._links;
