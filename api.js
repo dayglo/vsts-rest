@@ -56,15 +56,15 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
-    vstsApi.postObject = (url, body, endpoint, predicate, resultExtractor) => {
-        return vstsApi.sendObject('POST', url, body, endpoint, predicate, resultExtractor) 
+    vstsApi.postObject = (url, body, endpoint, predicate, resultExtractor, accept) => {
+        return vstsApi.sendObject('POST', url, body, endpoint, predicate, resultExtractor, accept) 
     }
 
-    vstsApi.putObject = (url, body, endpoint, predicate, resultExtractor) => {
-        return vstsApi.sendObject('PUT', url, body, endpoint, predicate, resultExtractor) 
+    vstsApi.putObject = (url, body, endpoint, predicate, resultExtractor, accept) => {
+        return vstsApi.sendObject('PUT', url, body, endpoint, predicate, resultExtractor, accept) 
     }
 
-    vstsApi.sendObject = (method, url, body, endpoint, predicate, resultExtractor) => {
+    vstsApi.sendObject = (method, url, body, endpoint, predicate, resultExtractor, accept) => {
         return new Promise((resolve, reject)=>{
             if (endpoint) endPoint = endpoint;
 
@@ -74,9 +74,12 @@ module.exports = function(vstsAccount, token) {
                 }
             }
 
+            var myHeaders = headers;
+            if (accept) myHeaders.accept = accept;
+
             var options = { method: method,
                 url: endPoint +  url,
-                headers: headers,
+                headers: myHeaders,
                 json: true,
                 body: body
             };
@@ -427,11 +430,14 @@ module.exports = function(vstsAccount, token) {
 
                     if (definitions && overwrite) {
                         console.log("Build definition " + buildDefinition.name + " already exists, updating...")
-
-                        return vstsApi._updateBuildDefinition( projectId, projectName, queue.id, queueName, definitions[0], buildDefinition.name, definitions[0].id)
+                        return vstsApi.getBuildDefinition(projectId, definitions[0].id)
+                        .then((oldBuildDefinition)=>{
+                            return vstsApi._updateBuildDefinition( projectId, projectName, queue.id, queueName, buildDefinition, buildDefinition.name , oldBuildDefinition.id)
+                        })
+                        
                     }
 
-                    return vstsApi._createBuildDefinition( projectId, projectName, queue.id, queueName, buildDefinition)
+                    return vstsApi._createBuildDefinition( projectId, projectName, queue.id, queueName, buildDefinition , buildDefinition.name)
 
                 })
    
@@ -451,7 +457,11 @@ module.exports = function(vstsAccount, token) {
         .then(buildDefinition => {
             return vstsApi.putObject(
                 '/' + projectId + '/_apis/build/definitions/' + buildDefinitionId,
-                buildDefinition
+                buildDefinition,
+                null ,
+                null ,
+                null ,
+                "application/json;api-version=4.1-preview.6;excludeUrls=true"
             )
         })
     }
