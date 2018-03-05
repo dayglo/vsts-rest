@@ -20,12 +20,14 @@ program
     .version(package.version)
     .usage("[projectName]")
     .arguments('[projectName]')
-    .option('-g, --gitrepo [path to git repo]', 'Path to the git repo to deploy. Default is the current directory.' , './')
-    .option('-b, --build [path to build definition json]', 'Include release steps in the new release definition [build]', './build.json')
-    .option('-r, --release [path to release definition json]', 'Include build steps in the new build definition [release]', './release.json')
-    .option('-a, --buildagent [build agent queue name]', 'Agent type to use for build', 'Hosted VS2017')
-    .option('-A, --releaseagent [release agent queue name]', 'Agent type to use for release', 'Hosted VS2017')  
-    .option('-v, --var [release_env_name:variable=value]', 'override variables in your release definition.' , collect, [])
+    .option('-g, --gitrepo <path to git repo>', 'Path to the git repo to deploy. Default is the current directory.' , './')
+    .option('-b, --build <path to build definition json>', 'Include release steps in the new release definition [build]', './build.json')
+    .option('-r, --release <path to release definition json>', 'Include build steps in the new build definition [release]', './release.json')
+    .option('-a, --buildagent <build agent queue name>', 'Agent type to use for build', 'Hosted VS2017')
+    .option('-A, --releaseagent <release agent queue name>', 'Agent type to use for release', 'Hosted VS2017')  
+    .option('-v, --var [release_env_name:]variable=value', 'override variables in your release definition.' , collect, [])
+    .option('--buildservice <input key=Service endpoint name>', 'override service endpoints in your build definition.' ,collect, [])
+    .option('--releaseservice <input key=Service endpoint name> ', 'override service endpoints in your build definition.' , collect, [])
 
     .action((ProjectName)=>{projectName = ProjectName})
     .parse(process.argv);
@@ -35,6 +37,7 @@ var buildFile = program.build;
 var releaseFile = program.release;
 var buildAgent = program.buildagent;
 var releaseAgent = program.releaseagent;
+
 
 var releaseVariables = {
     release: {},
@@ -56,6 +59,20 @@ releaseVariables = program.var.reduce((acc,i) => {
     
     return acc
 },releaseVariables)
+
+
+var buildServiceEndpoints = program.buildservice.reduce((acc,i)=>{
+    var [key,value] = i.split('=')
+    acc[key] = value
+    return acc
+},{})
+
+var releaseServiceEndpoints = program.releaseservice.reduce((acc,i)=>{
+    var [key,value] = i.split('=')
+    acc[key] = value
+    return acc
+},{})
+
 
 if (!process.env.VSTS_ACCOUNT)           {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
 if (!process.env.VSTS_PAT)               {console.log("Env var VSTS_PAT is not set. You need to generate one form the VSTS UI. Make sure it has access to the correct projects.") ; process.exit(1)}
@@ -106,11 +123,11 @@ var git = (localPath, command, stdout, stderr) =>{
 
         var pullRepoProcess = spawn('git' , command , {cwd:localPath});
 
-        // pullRepoProcess.stdout.setEncoding('utf-8');
-        // pullRepoProcess.stderr.setEncoding('utf-8');
+        pullRepoProcess.stdout.setEncoding('utf-8');
+        pullRepoProcess.stderr.setEncoding('utf-8');
 
-        // pullRepoProcess.stdout.on('data', stdout);
-        // pullRepoProcess.stderr.on('data', stderr);
+        pullRepoProcess.stdout.on('data', stdout);
+        pullRepoProcess.stderr.on('data', stderr);
 
         pullRepoProcess.on('error', stdout);
 
@@ -163,7 +180,7 @@ Promise.all([
     temporaryFolder = tmp.dirSync({unsafeCleanup:true});
     log(`pulling repo ${gitRepo} into ${temporaryFolder.name}`)
 
-    return git(temporaryFolder.name , ['clone' , gitRepo , '.'] , colourLog('cyan',"log") , colourLog('cyan',"error"))
+    return git(temporaryFolder.name , ['clone' , gitRepo , '.'] , colourLog('gray',"log") , colourLog('gray',"error"))
     .then(()=>{
         return git(
             temporaryFolder.name , 
@@ -179,14 +196,14 @@ Promise.all([
 .then(project => {
     log("creating build definition: " + chalk.magenta(buildDefinition.name))
     projectId = project.id
-    return vstsApi.createBuildDefinition(project.id, buildAgent, buildDefinition, true)
+    return vstsApi.createBuildDefinition(project.id, buildAgent, buildDefinition, buildServiceEndpoints ,true)
 })
 .then(buildDef => {
     buildDefId  = buildDef.id
 })
 .then(()=>{
     log("pushing code to repo")
-    return git(temporaryFolder.name , ['push' , projectName , 'master'] , colourLog('cyan',"log") , colourLog('cyan',"error"))
+    return git(temporaryFolder.name , ['push' , projectName , 'master'] , colourLog('gray',"log") , colourLog('gray',"error"))
 })
 .then(()=>{
     log("starting build")
@@ -201,7 +218,7 @@ Promise.all([
         buildDefId, 
         releaseAgent , 
         releaseDefinition, 
-        vstsAzureServiceName, 
+        releaseServiceEndpoints, 
         user, 
         true, 
         releaseVariables

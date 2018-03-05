@@ -15,8 +15,6 @@ module.exports = function(vstsAccount, token) {
         origin: endPoint,
     }
 
-
-
     function checkResponse(resolve,reject,predicate,resultExtractor){
         return (error, response, body) => {
             if (!predicate)         predicate       = () => {return true}
@@ -123,7 +121,7 @@ module.exports = function(vstsAccount, token) {
 
     vstsApi.searchIdentity = (identityEmail) => {
 
-         body = {
+        body = {
             "filterByAncestorEntityIds": [],
             "filterByEntityIds": [],
             "identityTypes": [
@@ -166,11 +164,9 @@ module.exports = function(vstsAccount, token) {
             console.error('Couldnt search identities: ' + e);
             process.exit(10)
         })
-
     }
 
     vstsApi.getAzureRmSubscriptions = () => {
-
          return vstsApi.getObject('_apis/distributedtask/serviceendpointproxy/azurermsubscriptions')
          .then(o=>{
             return o.value
@@ -400,7 +396,7 @@ module.exports = function(vstsAccount, token) {
                 source: 'NewProjectCreation:',
                 projectData: '{"VersionControlOption":"Git","ProjectVisibilityOption":null}' 
             },
-            endPoint,
+            endPoint
         )
     }
 
@@ -440,39 +436,53 @@ module.exports = function(vstsAccount, token) {
         return vstsApi.delObject('/_apis/projects/' + projectId)
     }
 
+    mapServiceEndpointNamesToIds = (buildServiceEndpoints, projectServiceEndpoints) =>{
+        return _.mapValues(buildServiceEndpoints,(serviceEndpointName)=>{ //{inputkey:serviceID , ...}
+            var targetEndpoint = projectServiceEndpoints.filter(e => e.name == serviceEndpointName)
+            if (targetEndpoint.length == 1){
+                return targetEndpoint[0].id
+            } else {
+                console.error("The service endpoint  " + serviceEndpointName + " could not be found in your project, OR there are more than one of them.")
+                process.exit(13)
+            }
+        })
+    }
 
-    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinition, overwrite)=>{
+    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinition, buildServiceEndpoints, overwrite)=>{
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
-            vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues')
+            vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues'),
+            vstsApi.getServiceEndpoints(projectId)
         ])
         .then((queryData)=>{
-            project = queryData[0];
-            projectQueues = queryData[1];
+            var project = queryData[0];
+            var projectQueues = queryData[1];
+            var projectServiceEndpoints = queryData[2];
 
             var queue = projectQueues.value.filter(q => q.name == queueName)[0];
-            if (queue) {
-                projectName = project.name;
-
-                return vstsApi.getBuildDefinitionsbyName(projectId, buildDefinition.name)
-                .then(definitions => {
-                    if ((definitions["length"]) && !overwrite) {
-                        return Promise.reject(new Error("The build definition already exists."))
-                    }
-
-                    if ((definitions["length"]) && overwrite) {
-                        console.log("Build definition " + buildDefinition.name + " already exists, updating...")
-                        return vstsApi._updateBuildDefinition(projectId, projectName, buildDefinition, definitions[0])  
-                    }
-                    return vstsApi._createBuildDefinition( projectId, projectName, queue.id, queueName, buildDefinition , buildDefinition.name)
-
-                })
-   
-            } else {
+            if (!queue) {
                 console.error("The queue " + queueName + " could not be found")
                 process.exit(12)
             }
+
+            var buildServiceEndpointIds = mapServiceEndpointNamesToIds(buildServiceEndpoints, projectServiceEndpoints);
+
+            return vstsApi.getBuildDefinitionsbyName(projectId, buildDefinition.name)
+            .then(definitions => {
+                if ((definitions["length"]) && !overwrite) {
+                    return Promise.reject(new Error("The build definition already exists."))
+                }
+
+                if ((definitions["length"]) && overwrite) {
+                    console.log("Build definition " + buildDefinition.name + " already exists, updating...")
+                    return vstsApi._updateBuildDefinition(projectId, project.name, buildDefinition, definitions[0], buildServiceEndpointIds)  
+                }
+                return vstsApi._createBuildDefinition( projectId, project.name, queue.id, queueName, buildDefinition , buildDefinition.name, buildServiceEndpointIds)
+
+            })
+   
+     
         })
         .catch(e=>{
             console.error('Couldn\'t create the build definition: ' + e + "\n" + e.stack)
@@ -480,11 +490,8 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
-    vstsApi._updateBuildDefinition = (projectId, projectName, buildDefinition, definitionIdProperties)  => {
-
-         _.merge(buildDefinition, definitionIdProperties)
-
-        buildDefinition.repository = {
+    defaultRepository = (endPoint , projectName) => {
+        return {
             properties: {
                 cleanOptions: '0',
                 labelSources: '0',
@@ -501,7 +508,30 @@ module.exports = function(vstsAccount, token) {
             defaultBranch: 'refs/heads/master',
             clean: 'false',
             checkoutSubmodules: false
-        };
+        }
+    }
+
+    applyServiceEndpointMappings = (buildDefinition, buildServiceEndpointIds) => {
+        buildDefinition.process.phases = buildDefinition.process.phases.map(phase =>{
+            phase.steps = phase.steps.map(step=>{
+                _.forOwn(step.inputs ,(value,key)=>{  
+                    if (key in buildServiceEndpointIds) {
+                        step.inputs[key] = buildServiceEndpointIds[key]
+                    }
+                })
+                return step
+            })
+            return phase
+        })
+        return buildDefinition
+    }
+
+    vstsApi._updateBuildDefinition = (projectId, projectName, buildDefinition, definitionIdProperties, buildServiceEndpointIds)  => {
+
+         _.merge(buildDefinition, definitionIdProperties)
+
+        buildDefinition.repository = defaultRepository(endPoint,projectName);
+        buildDefinition = applyServiceEndpointMappings(buildDefinition, buildServiceEndpointIds)
 
         return vstsApi.putObject(
             '/' + projectId + '/_apis/build/definitions/' + buildDefinition.id,
@@ -510,7 +540,10 @@ module.exports = function(vstsAccount, token) {
 
     }
 
-    vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName)  => {
+    vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName, buildServiceEndpointIds)  => {
+
+        buildDefinition = applyServiceEndpointMappings(buildDefinition, buildServiceEndpointIds)
+
         return vstsApi._assembleBuildDefinition(projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName)
         .then(buildDefinition => {
             return vstsApi.postObject(
@@ -550,7 +583,6 @@ module.exports = function(vstsAccount, token) {
         if (buildDefinitionId) {
             buildDefinition.id = buildDefinitionId
             buildDefinition.uri = "vstfs:///Build/Definition/" + buildDefinitionId
-
         }
         
         var queue =  {
@@ -569,28 +601,10 @@ module.exports = function(vstsAccount, token) {
             }
         }
 
-        buildDefinition.repository = {
-            properties: {
-                cleanOptions: '0',
-                labelSources: '0',
-                labelSourcesFormat: '$(build.buildNumber)',
-                reportBuildStatus: 'true',
-                gitLfsSupport: 'false',
-                skipSyncSource: 'false',
-                checkoutNestedSubmodules: 'false',
-                fetchDepth: '0'
-            },
-            type: 'TfsGit',
-            name: projectName,
-            url: endPoint + '/_git/' + projectName ,
-            defaultBranch: 'refs/heads/master',
-            clean: 'false',
-            checkoutSubmodules: false
-        };
+        buildDefinition.repository = defaultRepository(endpoint,projectName);
 
         buildDefinition.queue = queue
         
-
         delete buildDefinition.project;
         delete buildDefinition._links;
 
