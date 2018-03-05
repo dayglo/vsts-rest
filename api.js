@@ -190,20 +190,21 @@ module.exports = function(vstsAccount, token) {
         .then(o => o.value)
     }
 
-    vstsApi.createReleaseDefinition = (projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseDefinition, azureServiceEndpointName, user, overwrite, releaseVariables) => { 
+    vstsApi.createReleaseDefinition = (projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseDefinition, releaseServiceEndpoints, user, overwrite, releaseVariables) => { 
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
             vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues'),
             vstsApi.getDefaultCollection(),
-            vstsApi.getServiceEndpoint(projectId, azureServiceEndpointName),
+            vstsApi.getServiceEndpoints(projectId),
             vstsApi.searchIdentity(user)
         ])
         .then((queryData)=>{
             var project = queryData[0];
             var projectQueues = queryData[1];
             var defaultCollectionId = queryData[2].id;
-            var azureServiceEndpointId = queryData[3].id;
+            //var azureServiceEndpointId = queryData[3].id;
+            var projectServiceEndpoints = queryData[3];
             var identity = queryData[4];
 
             var owner = {
@@ -214,8 +215,13 @@ module.exports = function(vstsAccount, token) {
                 "url": endPoint
             }
 
-            var queueId = projectQueues.value.filter(q => q.name == queueName)[0].id;
-            projectName = project.name;
+            var queue = projectQueues.value.filter(q => q.name == queueName)[0];
+            if (!queue) {
+                console.error("The queue " + queueName + " could not be found")
+                process.exit(12)
+            }
+
+            var releaseServiceEndpointIds = mapServiceEndpointNamesToIds(releaseServiceEndpoints, projectServiceEndpoints);
 
             return vstsApi.getReleaseDefinitionsbyName(projectId, releaseDefinition.name)
             .then(definitions => {
@@ -225,10 +231,10 @@ module.exports = function(vstsAccount, token) {
 
                 if ((definitions.length != 0) && overwrite) {
                     console.log("Release definition " + releaseDefinition.name + " already exists, updating...")
-                    return vstsApi.updateReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, definitions[0], azureServiceEndpointId, owner, releaseVariables)
+                    return vstsApi.updateReleaseDefinition(defaultCollectionId, project.name, projectId, buildDefinitionName, buildDefinitionId, queue.id, releaseDefinition, definitions[0], releaseServiceEndpointIds, owner, releaseVariables)
                 }
 
-                return vstsApi._createReleaseDefinition(defaultCollectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables)
+                return vstsApi._createReleaseDefinition(defaultCollectionId, project.name, projectId, buildDefinitionName, buildDefinitionId, queue.id, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables)
             })
 
         })
@@ -258,9 +264,9 @@ module.exports = function(vstsAccount, token) {
         return vstsApi.delObject('/'+ projectId +'/_apis/Release/definitions/' + definitionId , rmEndPoint)
     }
 
-    vstsApi.updateReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, definitionIdProperties, azureServiceEndpointId, owner, releaseVariables)  => {
+    vstsApi.updateReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, definitionIdProperties, releaseServiceEndpointIds, owner, releaseVariables)  => {
 
-        releaseDefinition = vstsApi._assembleReleaseDefinition(collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables)
+        releaseDefinition = vstsApi._assembleReleaseDefinition(collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables)
         _.merge(releaseDefinition, definitionIdProperties)
 
         console.log(
@@ -273,51 +279,8 @@ module.exports = function(vstsAccount, token) {
         )
     }
 
-    vstsApi._assembleReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables) => {
-        
-
-        // set release scope variables
-        Object.keys(releaseVariables.release).forEach(function(key) {
-            releaseDefinition.variables[key] = {value: releaseVariables.release[key]} 
-        });
-
-        releaseDefinition.owner = owner
-
-        releaseDefinition.environments = _.map(releaseDefinition.environments,(env) => {
-
-            env.id = -1
-            env.owner = owner
-            
-            // set environment scope variables
-            if (releaseVariables.environments[env.name]) {
-                Object.keys(releaseVariables.environments[env.name]).forEach(function(key) {
-                    env.variables[key] = {value: releaseVariables.environments[env.name][key]} 
-                });
-            }
-
-            // overwrite service endpoints and queues in each environment.
-            env.deployPhases = env.deployPhases.map((phase)=>{
-                phase.deploymentInput.queueId = queueId
-            
-                if ((phase["workflowTasks"]) && (azureServiceEndpointId)) {
-
-                    phase.workflowTasks = phase.workflowTasks.map(task=>{
-                        if (task["inputs"]["ConnectedServiceName"]) {
-                            task.inputs.ConnectedServiceName = azureServiceEndpointId
-                        }
-                            if (task["inputs"]["connectedServiceNameARM"]) {
-                            task.inputs.connectedServiceNameARM = azureServiceEndpointId
-                        }
-                        return task
-                    })
-                }
-                return phase
-            })
-
-            return env
-        })
-
-        releaseDefinition.artifacts = [
+    defaultArtifacts = (projectName, projectId, buildDefinitionName, buildDefinitionId, collectionId, endPoint) =>{
+        return [
             {
                 "type": "Build",
                 "definitionReference": {
@@ -352,17 +315,71 @@ module.exports = function(vstsAccount, token) {
                 },
                 "alias": buildDefinitionName,
                 "isPrimary": true,
-                "sourceId": projectId + ':3'
+                "sourceId": projectId + ':1'
             }
         ]
+
+    }
+
+    applyReleaseServiceEndpointMappings = (releaseDefinition, releaseServiceEndpointIds) => {
+        releaseDefinition.environments = releaseDefinition.environments.map(environment =>{
+            environment.deployPhases = environment.deployPhases.map((phase)=>{
+                phase.workflowTasks = phase.workflowTasks.map(workflowTask=>{
+                    _.forOwn(workflowTask.inputs ,(value,key)=>{  
+                        if (key in releaseServiceEndpointIds) {
+                            workflowTask.inputs[key] = releaseServiceEndpointIds[key]
+                        }
+                    })
+                    return workflowTask
+                })
+                return phase
+            })
+            return environment
+        })
+        return releaseDefinition
+    }
+
+    vstsApi._assembleReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables) => {
+        
+        // set release scope variables
+        Object.keys(releaseVariables.release).forEach(function(key) {
+            releaseDefinition.variables[key] = {value: releaseVariables.release[key]} 
+        });
+
+        releaseDefinition.owner = owner
+
+        releaseDefinition.environments = _.map(releaseDefinition.environments,(env) => {
+
+            env.id = -1
+            env.owner = owner
+            
+            // set environment scope variables
+            if (releaseVariables.environments[env.name]) {
+                Object.keys(releaseVariables.environments[env.name]).forEach(function(key) {
+                    env.variables[key] = {value: releaseVariables.environments[env.name][key]} 
+                });
+            }
+
+            // overwrite queues in each environment.
+            env.deployPhases = env.deployPhases.map((phase)=>{
+                phase.deploymentInput.queueId = queueId
+                return phase
+            })
+
+            return env
+        })
+
+        releaseDefinition = applyReleaseServiceEndpointMappings(releaseDefinition, releaseServiceEndpointIds)
+
+        releaseDefinition.artifacts = defaultArtifacts(projectName, projectId, buildDefinitionName, buildDefinitionId, collectionId, endPoint)
 
         return releaseDefinition
     }
 
-    vstsApi._createReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables) => {
+    vstsApi._createReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables) => {
         return new Promise((resolve,reject)=>{ 
 
-            releaseDefinition = vstsApi._assembleReleaseDefinition(collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, azureServiceEndpointId, owner, releaseVariables)
+            releaseDefinition = vstsApi._assembleReleaseDefinition(collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables)
            
             vstsApi.postObject(
                 '/'+ projectId +'/_apis/Release/definitions',
@@ -511,7 +528,7 @@ module.exports = function(vstsAccount, token) {
         }
     }
 
-    applyServiceEndpointMappings = (buildDefinition, buildServiceEndpointIds) => {
+    applyBuildServiceEndpointMappings = (buildDefinition, buildServiceEndpointIds) => {
         buildDefinition.process.phases = buildDefinition.process.phases.map(phase =>{
             phase.steps = phase.steps.map(step=>{
                 _.forOwn(step.inputs ,(value,key)=>{  
@@ -531,7 +548,7 @@ module.exports = function(vstsAccount, token) {
          _.merge(buildDefinition, definitionIdProperties)
 
         buildDefinition.repository = defaultRepository(endPoint,projectName);
-        buildDefinition = applyServiceEndpointMappings(buildDefinition, buildServiceEndpointIds)
+        buildDefinition = applyBuildServiceEndpointMappings(buildDefinition, buildServiceEndpointIds)
 
         return vstsApi.putObject(
             '/' + projectId + '/_apis/build/definitions/' + buildDefinition.id,
@@ -542,7 +559,7 @@ module.exports = function(vstsAccount, token) {
 
     vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName, buildServiceEndpointIds)  => {
 
-        buildDefinition = applyServiceEndpointMappings(buildDefinition, buildServiceEndpointIds)
+        buildDefinition = applyBuildServiceEndpointMappings(buildDefinition, buildServiceEndpointIds)
 
         return vstsApi._assembleBuildDefinition(projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName)
         .then(buildDefinition => {
