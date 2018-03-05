@@ -71,7 +71,6 @@ Run these commands:
 export VSTS_PAT=your-pat-token 
 export VSTS_ACCOUNT=your-vsts-account
 export VSTS_USER=your-vsts-email-address
-export VSTS_AZURE_SERVICE=azureService // this is the name you created when you made the azure link
 
 vsts-import YourProjectName -g https://bitbucket.org/automationlogic/demoapplication 
 
@@ -79,15 +78,44 @@ vsts-import YourProjectName -g https://bitbucket.org/automationlogic/demoapplica
 
 If all goes well, A build definition and release definition will be created. In addition, the specified repo will be pushed to your project, and a build will be initiated.
 
+### Overriding build or release agents
 
-Command line options:
+If you want to override the agents from the exported build or release, you'll need to specify the ```--buildagent``` or ```--releaseagent``` switches. They are used like so: 
+
+```vsts-import MyProject --buildagent 'Hosted Linux Preview' --releaseagent 'Hosted macOS preview'```
+
+### Setting connected service endpoints (preview feature).
+
+If your definitions were exported from another project, you may not have access to the connected services that they had access to. You may connect definitions to services by specifying the input key name to override, and the name of the connected service. Example:
+
 ```
-    -V, --version                                    output the version number
-    -g, --gitrepo [path to git repo]                 Path to the git repo to deploy. Default is the current directory. (default: ./)
-    -b, --build [path to build definition json]      Include release steps in the new release definition [build] (default: ./build.json)
-    -r, --release [path to release definition json]  Include build steps in the new build definition [release] (default: ./release.json)
-    -a, --buildagent [build agent queue name]        Agent type to use for build (default: Hosted VS2017)
-    -A, --releaseagent [release agent queue name]    Agent type to use for release (default: Hosted VS2017)
+vsts-import MyProject \
+  --releaseservice 'connectedServiceNameARM=AzureServiceWestEurope' \
+  --releaseservice 'ConnectedServiceName=AzureServiceWestEurope' \
+  --buildservice 'SonarQube=SonarqubeService'
+
+``` 
+
+This feature works fine, but needs further testing.
+
+
+## Command line options:
+```
+
+  Usage: vsts-import [projectName]
+
+
+  Options:
+
+    -V, --version                                        output the version number
+    -g, --gitrepo <path to git repo>                     Path to the git repo to deploy. Default is the current directory. (default: ./)
+    -b, --build <path to build definition json>          Include release steps in the new release definition [build] (default: ./build.json)
+    -r, --release <path to release definition json>      Include build steps in the new build definition [release] (default: ./release.json)
+    -a, --buildagent <build agent queue name>            Agent type to use for build (default: Hosted VS2017)
+    -A, --releaseagent <release agent queue name>        Agent type to use for release (default: Hosted VS2017)
+    -v, --var [release_env_name:]variable=value          override variables in your release definition. (default: )
+    --buildservice <input key=Service endpoint name>     override service endpoints in your build definition. (default: )
+    --releaseservice <input key=Service endpoint name>   override service endpoints in your build definition. (default: )
     -h, --help                                       output usage information
 
 ```
