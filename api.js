@@ -618,7 +618,7 @@ module.exports = function(vstsAccount, token) {
             }
         }
 
-        buildDefinition.repository = defaultRepository(endpoint,projectName);
+        buildDefinition.repository = defaultRepository(endPoint,projectName);
 
         buildDefinition.queue = queue
         
