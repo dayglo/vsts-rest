@@ -190,7 +190,7 @@ module.exports = function(vstsAccount, token) {
         .then(o => o.value)
     }
 
-    vstsApi.createReleaseDefinition = (projectName, projectId, buildDefinitionName, buildDefinitionId, queueName, releaseDefinition, releaseServiceEndpoints, user, overwrite, releaseVariables) => { 
+    vstsApi.createReleaseDefinition = (projectName, projectId, buildDefinitionName, buildDefinitionId, releaseAgents, releaseDefinition, releaseServiceEndpoints, user, overwrite, releaseVariables) => { 
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
@@ -215,12 +215,6 @@ module.exports = function(vstsAccount, token) {
                 "url": endPoint
             }
 
-            var queue = projectQueues.value.filter(q => q.name == queueName)[0];
-            if (!queue) {
-                console.error("The queue " + queueName + " could not be found")
-                process.exit(12)
-            }
-
             var releaseServiceEndpointIds = mapServiceEndpointNamesToIds(releaseServiceEndpoints, projectServiceEndpoints);
 
             return vstsApi.getReleaseDefinitionsbyName(projectId, releaseDefinition.name)
@@ -231,10 +225,10 @@ module.exports = function(vstsAccount, token) {
 
                 if ((definitions.length != 0) && overwrite) {
                     console.log("Release definition " + releaseDefinition.name + " already exists, updating...")
-                    return vstsApi.updateReleaseDefinition(defaultCollectionId, project.name, projectId, buildDefinitionName, buildDefinitionId, queue.id, releaseDefinition, definitions[0], releaseServiceEndpointIds, owner, releaseVariables)
+                    return vstsApi.updateReleaseDefinition(defaultCollectionId, project.name, projectId, buildDefinitionName, buildDefinitionId, projectQueues.value, releaseAgents, releaseDefinition, definitions[0], releaseServiceEndpointIds, owner, releaseVariables)
                 }
 
-                return vstsApi._createReleaseDefinition(defaultCollectionId, project.name, projectId, buildDefinitionName, buildDefinitionId, queue.id, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables)
+                return vstsApi._createReleaseDefinition(defaultCollectionId, project.name, projectId, buildDefinitionName, buildDefinitionId, projectQueues.value, releaseAgents, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables)
             })
 
         })
@@ -264,9 +258,9 @@ module.exports = function(vstsAccount, token) {
         return vstsApi.delObject('/'+ projectId +'/_apis/Release/definitions/' + definitionId , rmEndPoint)
     }
 
-    vstsApi.updateReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, definitionIdProperties, releaseServiceEndpointIds, owner, releaseVariables)  => {
+    vstsApi.updateReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queues, releaseAgents, releaseDefinition, definitionIdProperties, releaseServiceEndpointIds, owner, releaseVariables)  => {
 
-        releaseDefinition = vstsApi._assembleReleaseDefinition(collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables)
+        releaseDefinition = vstsApi._assembleReleaseDefinition(collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queues, releaseAgents, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables)
         _.merge(releaseDefinition, definitionIdProperties)
 
         console.log(
@@ -339,7 +333,7 @@ module.exports = function(vstsAccount, token) {
         return releaseDefinition
     }
 
-    vstsApi._assembleReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables) => {
+    vstsApi._assembleReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queues, releaseAgents, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables) => {
         
         // set release scope variables
         Object.keys(releaseVariables.release).forEach(function(key) {
@@ -368,6 +362,10 @@ module.exports = function(vstsAccount, token) {
 
             return env
         })
+
+
+        // TODO now implement agent queue replacement stuff:
+
 
         releaseDefinition = applyReleaseServiceEndpointMappings(releaseDefinition, releaseServiceEndpointIds)
 
