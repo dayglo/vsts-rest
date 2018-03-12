@@ -333,36 +333,34 @@ module.exports = function(vstsAccount, token) {
         return releaseDefinition
     }
 
+    replaceQueues = (releaseDefinition, queues, newQueueName, targetEnvironmentName, targetPhaseName) => {
+        releaseDefinition.environments = releaseDefinition.environments.map(environment =>{
+            if ((environment.name == targetEnvironmentName) || (targetEnvironmentName == null)) {
+                environment.deployPhases = environment.deployPhases.map((phase)=>{
 
-// [
-//   "AllEnvs",
-//   {
-//     "Deploy": "Hosted Linux Default"
-//   },
-//   {
-//     "Selenium": {
-//       "Phase2": "Hosted VS2017"
-//     }
-//   },
-//   {
-//     "Deploy": {
-//       "Phase7": "Hosted macOS Default"
-//     }
-//   }
-// ]
+                    if ((phase.name == targetPhaseName) || (targetPhaseName == null)) {
+                        phase.deploymentInput.queueId = getQueueId(queues, newQueueName)
+                    }
+                    return phase
 
+                })
+            }
+            return environment
+        }) 
+        return releaseDefinition
+    }
+
+    getQueueId = (queues, queueName)=>{
+        //check the string specified is an existing queue first
+        let queue = _.find(queues,{name:queueName})
+        if (!queue) {
+            console.error("the queue " + queueName + " was not found in the project.")
+            process.exit(16)
+        }
+        return queue.id
+    }
 
     applyQueueReplacements = (releaseDefinition, queues, releaseAgentReplacements) =>{ 
-
-        var getQueueId = (queueName)=>{
-            //check the string specified is an existing queue
-            let queue = _.find(queues,{name:queueName})
-            if (!queue) {
-                console.error("the queue " + queueName + " was not found in the project.")
-                process.exit(16)
-            }
-            return queue.id
-        }
 
         // Iterate the specified replacement rules in order
         _.forEach(releaseAgentReplacements, (releaseAgentReplacement)=>{
@@ -370,14 +368,7 @@ module.exports = function(vstsAccount, token) {
             //replace ALL queues
             if (typeof releaseAgentReplacement == "string") {
                 let newQueueName = releaseAgentReplacement;
-
-                releaseDefinition.environments = releaseDefinition.environments.map(environment =>{
-                    environment.deployPhases = environment.deployPhases.map((phase)=>{
-                        phase.deploymentInput.queueId = getQueueId(newQueueName)
-                        return phase
-                    })
-                    return environment
-                })
+                return replaceQueues(releaseDefinition, queues, newQueueName)
             }
 
             if (typeof releaseAgentReplacement == "object") {
@@ -386,39 +377,13 @@ module.exports = function(vstsAccount, token) {
                 if (typeof releaseAgentReplacement[targetEnvironmentName] == "string"){
                     //replace all queues in the environment
                     let newQueueName = releaseAgentReplacement[targetEnvironmentName]
-
-                    releaseDefinition.environments = releaseDefinition.environments.map(environment =>{
-
-                        if (environment.name == targetEnvironmentName) {
-                            environment.deployPhases = environment.deployPhases.map((phase)=>{
-                                phase.deploymentInput.queueId = getQueueId(newQueueName)
-                                return phase
-                            })
-                            
-                        }
-                        return environment
-                    })  
-
+                    return replaceQueues(releaseDefinition, queues, newQueueName, targetEnvironmentName)
+                    
                 } else {
                     //replace a single phase's queue
                     let targetPhaseName = Object.keys(releaseAgentReplacement[targetEnvironmentName])[0]
                     let newQueueName = releaseAgentReplacement[targetEnvironmentName][targetPhaseName]
-
-                    releaseDefinition.environments = releaseDefinition.environments.map(environment =>{
-
-                        if (environment.name == targetEnvironmentName) {
-                            environment.deployPhases = environment.deployPhases.map((phase)=>{
-
-                                if (phase.name == targetPhaseName) {
-                                    phase.deploymentInput.queueId = getQueueId(newQueueName)
-                                }
-                               
-                                return phase
-                            })
-                            
-                        }
-                        return environment
-                    })  
+                    return replaceQueues(releaseDefinition, queues, newQueueName, targetEnvironmentName, targetPhaseName)
                 }
             }
         })
@@ -447,17 +412,8 @@ module.exports = function(vstsAccount, token) {
                 });
             }
 
-            // // overwrite queues in each environment.
-            // env.deployPhases = env.deployPhases.map((phase)=>{
-            //     phase.deploymentInput.queueId = queueId
-            //     return phase
-            // })
-
             return env
         })
-
-
-        // TODO now implement agent queue replacement stuff:
 
         releaseDefinition = applyQueueReplacements(releaseDefinition, queues, releaseAgents)
         releaseDefinition = applyReleaseServiceEndpointMappings(releaseDefinition, releaseServiceEndpointIds)
