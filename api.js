@@ -423,10 +423,10 @@ module.exports = function(vstsAccount, token) {
         return releaseDefinition
     }
 
-    vstsApi._createReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables) => {
+    vstsApi._createReleaseDefinition = (collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queues, releaseAgents, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables) => {
         return new Promise((resolve,reject)=>{ 
 
-            releaseDefinition = vstsApi._assembleReleaseDefinition(collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queueId, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables)
+            releaseDefinition = vstsApi._assembleReleaseDefinition(collectionId, projectName, projectId, buildDefinitionName, buildDefinitionId, queues, releaseAgents, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables)
            
             vstsApi.postObject(
                 '/'+ projectId +'/_apis/Release/definitions',
