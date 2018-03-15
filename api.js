@@ -248,7 +248,7 @@ module.exports = function(vstsAccount, token) {
     }
 
     vstsApi.getReleaseDefinitionsbyName = (projectId, releaseDefinitionName) => {
-        return vstsApi.getObject('/'+ projectId +'/_apis/Release/definitions', rmEndPoint)
+        return vstsApi.getObject('/'+ projectId +'/_apis/release/definitions', rmEndPoint)
         .then((definitions)=>{
             return definitions.value.filter(r => r.name == releaseDefinitionName);
         })
@@ -617,13 +617,13 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
-    vstsApi.getBuildDefinitionsbyName = (projectId, buildDefinitionName) => {
+    vstsApi.getBuildDefinitionsbyName = (projectId, definitionName) => {
         return vstsApi.getObject(
             '/' + projectId + '/_apis/build/definitions/',
             null,
             null,
             (body) => {
-                return body.value.filter(x => x.name == buildDefinitionName);
+                return body.value.filter(x => x.name == definitionName);
             },
         )
     }
@@ -673,8 +673,29 @@ module.exports = function(vstsAccount, token) {
         delete buildDefinition._links;
 
         return Promise.resolve(buildDefinition)
-
                     
+    }
+
+    vstsApi.createRelease = (projectId,releaseId,buildNumber = 353, buildAlias = "DemoApplication-CI", manualEnvironments) => {
+
+        var body = {
+            "definitionId": releaseId,
+            "description": "Creating Sample release",
+            "artifacts": [
+                {
+                    "alias": buildAlias,
+                    "instanceReference": {
+                        "id": buildNumber,
+                    }
+                }
+            ],
+            "isDraft": false,
+            "reason": "none",
+            "manualEnvironments": manualEnvironments
+        }
+
+        return vstsApi.postObject('/' + projectId + "/_apis/release/releases", body, rmEndPoint)
+
     }
 
     return vstsApi
