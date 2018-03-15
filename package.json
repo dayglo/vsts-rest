@@ -16,7 +16,7 @@
   },
   "bin": {
     "vsts-import": "./vsts-import.js",
-    "vsts-build":  "./vsts-build.js"
+    "vsts-build": "./vsts-build.js"
   },
   "files": [
     "vsts-import.js",
