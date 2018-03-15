@@ -257,5 +257,9 @@ Promise.all([
     return JSON.stringify(json,null,2)
 })
 .then(console.log)
-.catch(console.error)
+.catch(handleExit)
 
+function handleExit (e) {
+    console.error(e)
+    process.exit(1)
+}

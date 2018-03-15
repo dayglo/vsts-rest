@@ -23,7 +23,7 @@ program
     .parse(process.argv);
 
 var build = program.build;
-
+var errCode = 0
 
 
 if (!process.env.VSTS_ACCOUNT)           {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
@@ -78,6 +78,7 @@ function sayError(e){
     console.log('error:')
     console.log('  message: ' + e.message)
     console.log('  stack: ' + JSON.stringify(e.stack))
+    errCode = 1;
 }
 
 //url, endpoint, predicate, resultExtractor
@@ -130,5 +131,8 @@ Promise.resolve()
 })
 .then(()=>{
     log('...')
+    process.exit(errCode)
 })
+
+
 
