@@ -29,6 +29,7 @@ program
     .option('-v, --var [release_env_name:]variable=value', 'override variables in your release definition.' , collect, [])
     .option('--buildservice <input key=Service endpoint name>', 'override service endpoints in your build definition.' ,collect, [])
     .option('--releaseservice <input key=Service endpoint name> ', 'override service endpoints in your build definition.' , collect, [])
+    .option('--no-git', 'don\'t push the repo to vsts', false )
 
     .action((ProjectName)=>{projectName = ProjectName})
     .parse(process.argv);
@@ -38,6 +39,7 @@ var buildFile = program.build;
 var releaseFile = program.release;
 var buildAgent = program.buildagent;
 var releaseAgent = program.releaseagent;
+
 
 var releaseVariables = {
     release: {},
@@ -195,21 +197,27 @@ Promise.all([
 })
 .then(project=>{
 
-    temporaryFolder = tmp.dirSync({unsafeCleanup:true});
-    log(`pulling repo ${gitRepo} into ${temporaryFolder.name}`)
+    if (program.git) {
+        temporaryFolder = tmp.dirSync({unsafeCleanup:true});
+        log(`pulling repo ${gitRepo} into ${temporaryFolder.name}`)
 
-    return git(temporaryFolder.name , ['clone' , gitRepo , '.'] , colourLog('gray',"log") , colourLog('gray',"error"))
-    .then(()=>{
-        return git(
-            temporaryFolder.name , 
-            ['remote', 'add' , projectName , 'https://'+ vstsAccount +'.visualstudio.com/_git/' + projectName] , 
-            colourLog('cyan',"log") , 
-            colourLog('cyan',"error")
-        )
-    })
-    .then(()=>{
+        return git(temporaryFolder.name , ['clone' , gitRepo , '.'] , colourLog('gray',"log") , colourLog('gray',"error"))
+        .then(()=>{
+            return git(
+                temporaryFolder.name , 
+                ['remote', 'add' , projectName , 'https://'+ vstsAccount +'.visualstudio.com/_git/' + projectName] , 
+                colourLog('cyan',"log") , 
+                colourLog('cyan',"error")
+            )
+        })
+        .then(()=>{
+            return project
+        })
+    } else {
         return project
-    })
+    }
+
+
 })
 .then(project => {
     log("creating build definition: " + chalk.magenta(buildDefinition.name))
@@ -220,8 +228,11 @@ Promise.all([
     buildDefId  = buildDef.id
 })
 .then(()=>{
-    log("pushing code to repo")
-    return git(temporaryFolder.name , ['push' , projectName , 'master'] , colourLog('gray',"log") , colourLog('gray',"error"))
+    if (program.git) {
+        log("pushing code to repo")
+        return git(temporaryFolder.name , ['push' , projectName , 'master'] , colourLog('gray',"log") , colourLog('gray',"error"))    
+    }
+    return Promise.resolve()
 })
 .then(()=>{
     log("starting build")
