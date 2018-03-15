@@ -121,6 +121,13 @@ Promise.resolve()
     .then(build => {
         if (program.wait) {
             return waitForBuildComplete(build)
+            .then(result=>{
+                if (result == "succeeded"){
+                    errCode = 0
+                } else {
+                    errCode = 2
+                }
+            })
         } else {
             return build
         }
