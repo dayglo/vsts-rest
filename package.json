@@ -1,6 +1,6 @@
 {
   "name": "vsts-rest",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "description": "",
   "main": "api.js",
   "dependencies": {
@@ -16,7 +16,7 @@
   },
   "bin": {
     "vsts-import": "./vsts-import.js",
-    "vsts-build":  "./vsts-build.js"
+    "vsts-build": "./vsts-build.js"
   },
   "files": [
     "vsts-import.js",

@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 
-const chalk = require('chalk');
 const package = require('./package.json')
 const program = require('commander');
 const VstsApi = require('./api.js');
-const fse = require('fs-extra')
 const spawn = require('child_process').spawn;
 
 
@@ -20,7 +18,7 @@ program
     .usage("[projectName]")
     .arguments('[projectName]')
     .option('-b, --build <name of build definition>', 'build def to trigger')
-
+    .option('-w, --wait' , 'wait for build to finish.')
     .action((ProjectName)=>{projectName = ProjectName})
     .parse(process.argv);
 
@@ -37,6 +35,9 @@ var vstsApi = new VstsApi(vstsAccount,token);
 
 if (!projectName) projectName = require("os").userInfo().username + '-' + timeStamp;
 
+console.log('---')
+log('project-name: ' + projectName )
+log('build-definition-name: '+ program.build)
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // Helper Functions
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -46,38 +47,88 @@ function log(t){
     console.log(t)
 }
 
+
+var waitForBuildComplete = (build) => {
+    return new Promise((resolve,reject) =>{
+        console.log("status-check-log: |")
+        var checkResult = () => {
+            process.stdout.write("  checking status: ")
+            vstsApi.getObject(
+                build.url,
+                "",
+               null,
+                (body)=>{
+                    if (body.status !== "completed") {
+                        console.log(body.status)
+                        setTimeout(checkResult,3000)
+                    } else {
+                        console.log(body.status)
+                        console.log("result: " + body.result)
+                        resolve(body.result)
+                    }
+                    
+                }
+            )
+        }
+        checkResult()
+    })
+}
+
+function sayError(e){
+    console.log('error:')
+    console.log('  message: ' + e.message)
+    console.log('  stack: ' + JSON.stringify(e.stack))
+}
+
+//url, endpoint, predicate, resultExtractor
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // Main
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 var projectId
 
+
 Promise.resolve()
 .then(()=>{
-    log("Getting project data for project: " + chalk.blue(projectName))
-    return vstsApi.getProjectByName(projectName)
-})
-.then(project => {
-    if (project) {
-        projectId = project.id
-    } 
-    else {
-        log("project didnt exist")
-        process.exit(0)
-    }
-})
-.then(() =>{
-    return vstsApi.getBuildDefinitionsbyName(projectId, build)
-})
-.then(definitions => {
-    if ((definitions["length"] !== 1)) {
-        return Promise.reject(new Error("The build definition did not exist or was not uniquely named."))
-    }
 
-    return vstsApi.startBuild(projectId, definitions[0].id)
+    return Promise.resolve()
+    .then(()=>{
+        //log("Getting project data for project: " + chalk.blue(projectName))
+        return vstsApi.getProjectByName(projectName)
+    })
+    .then(project => {
+        if (project) {
+            projectId = project.id
+        } 
+        else {
+            log("error: project didnt exist")
+            process.exit(0)
+        }
+    })
+    .then(() =>{
+        return vstsApi.getBuildDefinitionsbyName(projectId, build)
+    })
+    .then(definitions => {
+        if ((definitions["length"] !== 1)) {
+            throw new Error("The build definition did not exist or was not uniquely named.")
+            return 
+        }
+
+        log("build-definition-id: " + definitions[0].id)
+        log("build-definition-url: " + definitions[0].url)
+        return vstsApi.startBuild(projectId, definitions[0].id)
+    })
+    .then(build => {
+        if (program.wait) {
+            return waitForBuildComplete(build)
+        } else {
+            return build
+        }
+
+    })
+    .catch(sayError)
+
 })
-.then(json => {
-    return JSON.stringify(json,null,2)
+.then(()=>{
+    log('...')
 })
-.then(console.log)
-.catch(console.error)
 
