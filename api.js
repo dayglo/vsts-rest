@@ -37,7 +37,7 @@ module.exports = function(vstsAccount, token) {
 
     vstsApi.getObject = (url, endpoint, predicate, resultExtractor) => {
         return new Promise((resolve, reject)=>{
-            if ((endpoint !== null) || (endpoint !== undefined)) endPoint = endpoint;
+            if ((endpoint !== null) && (endpoint !== undefined)) endPoint = endpoint;
             
             if (!predicate) {
                 var predicate = (result) => {
