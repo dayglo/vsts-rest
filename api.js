@@ -676,25 +676,45 @@ module.exports = function(vstsAccount, token) {
                     
     }
 
-    vstsApi.createRelease = (projectId,releaseId,buildNumber = 353, buildAlias = "DemoApplication-CI", manualEnvironments) => {
+    vstsApi.createRelease = (projectId, releaseDefId, manualEnvironments) =>{
 
-        var body = {
-            "definitionId": releaseId,
-            "description": "Creating Sample release",
-            "artifacts": [
-                {
+        var buildAlias
+
+        return vstsApi.getObject('/' + projectId + '/_apis/release/definitions/' + releaseDefId, rmEndPoint)
+        .then(releaseDef => {
+
+            buildAlias = releaseDef.artifacts[0].alias
+            return vstsApi.postObject(
+                '/' + projectId + '/_apis/Release/artifacts/versions/', 
+                [{
+                    "type": "Build",
                     "alias": buildAlias,
-                    "instanceReference": {
-                        "id": buildNumber,
-                    }
-                }
-            ],
-            "isDraft": false,
-            "reason": "none",
-            "manualEnvironments": manualEnvironments
-        }
+                    "definitionReference": releaseDef.artifacts[0].definitionReference
+                }], 
+                rmEndPoint
+            )
 
-        return vstsApi.postObject('/' + projectId + "/_apis/release/releases", body, rmEndPoint)
+        })
+        .then(artifacts => {
+  
+            var body = {
+                "definitionId": releaseDefId,
+                "description": "Creating Sample release",
+                "artifacts": [
+                    {
+                        "alias": buildAlias,
+                        "instanceReference": {
+                            "id": artifacts.artifactVersions[0].versions[0].id,
+                        }
+                    }
+                ],
+                "isDraft": false,
+                "reason": "none",
+                "manualEnvironments": manualEnvironments
+            }
+
+            return vstsApi.postObject('/' + projectId + "/_apis/release/releases", body, rmEndPoint)
+        })
 
     }
 

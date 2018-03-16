@@ -19,10 +19,13 @@ program
     .arguments('[projectName]')
     .option('-b, --release <name of release definition>', 'release def to trigger')
     .option('-w, --wait' , 'wait for release to finish.')
+    .option('-a, --artifact', 'name of the artifact to use.',"")
+    .option('-e, --environmentcheck', 'check a particular environment deployed successfully and ignore the others. May be specified multiple times.', collect, [])
     .action((ProjectName)=>{projectName = ProjectName})
     .parse(process.argv);
 
 var release = program.release;
+var environmentsToCheck = program.environmentcheck;
 var errCode = 0
 
 
@@ -47,23 +50,62 @@ function log(t){
     console.log(t)
 }
 
+function collect(val, memo) {
+    memo.push(val);
+    return memo;
+}
+
+var completionPredicate = (release, environmentsToCheck) => {
+    
+    if (environmentsToCheck === undefined) {
+        environmentsToCheck = release.environments.map(x => x.name)
+    }
+
+    var status = release.environments.reduce((acc,i) => {
+        acc.push("  " + i.name + ": " + i.status)
+        return acc
+    },[]).join("\n")
+
+    var isFinished = true
+
+    environmentsToCheck.forEach(envName => {
+        var envStatus = release.environments.filter(e => e.name == envName)[0].status
+        if ((envStatus === "inProgress") || (envStatus === "queued")) {
+            isFinished = false
+        }
+
+    })
+
+    var result = "succeeded"
+    if (isFinished) {
+        environmentsToCheck.forEach(envName => {
+            var envStatus = release.environments.filter(e => e.name == envName)[0].status
+            if (envStatus !== "succeeded") {
+                result = "failed"
+            }
+        })
+    }
+
+    return [isFinished,result,status]
+}
+
 var waitForReleaseComplete = (release) => {
     return new Promise((resolve,reject) =>{
         console.log("status-check-log: |")
         var checkResult = () => {
-            process.stdout.write("  checking status: ")
             vstsApi.getObject(
                 release.url,
                 "",
                 null,
                 (body)=>{
-                    if (body.status !== "completed") {
-                        console.log(body.status)
-                        setTimeout(checkResult,3000)
+                    var [isFinished,result,status] = completionPredicate(body,environmentsToCheck)
+                    if (!isFinished) {
+                        console.log(status)
+                        setTimeout(checkResult,6000)
                     } else {
-                        console.log(body.status)
-                        console.log("result: " + body.result)
-                        resolve(body.result)
+                        console.log(status)
+                        console.log("result: " + result)
+                        resolve(result)
                     }
                     
                 }
@@ -118,6 +160,8 @@ Promise.resolve()
         return vstsApi.createRelease(projectId, definitions[0].id)
     })
     .then(release => {
+        log("release-id: " + release.id)
+        log("release-url: " + release.url)
         if (program.wait) {
             return waitForReleaseComplete(release)
             .then(result=>{
