@@ -70,7 +70,7 @@ var completionPredicate = (release, environmentsToCheck) => {
 
     environmentsToCheck.forEach(envName => {
         var envStatus = release.environments.filter(e => e.name == envName)[0].status
-        if ((envStatus === "inProgress") || (envStatus === "queued")) {
+        if ((envStatus === "inProgress") || (envStatus === "queued") || (envStatus === "notStarted")) {
             isFinished = false
         }
 
@@ -134,7 +134,6 @@ Promise.resolve()
 
     return Promise.resolve()
     .then(()=>{
-        //log("Getting project data for project: " + chalk.blue(projectName))
         return vstsApi.getProjectByName(projectName)
     })
     .then(project => {
