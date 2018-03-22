@@ -1,6 +1,6 @@
 {
   "name": "vsts-rest",
-  "version": "3.2.8",
+  "version": "3.2.9",
   "description": "",
   "main": "api.js",
   "dependencies": {
@@ -8,7 +8,6 @@
     "commander": "^2.14.1",
     "fs-extra": "^5.0.0",
     "lodash": "^4.17.5",
-    "npm": "^5.7.1",
     "promisify-node": "^0.4.0",
     "request": "^2.83.0",
     "simple-git": "^1.89.0",

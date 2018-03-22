@@ -64,6 +64,10 @@ module.exports = function(vstsAccount, token) {
         return vstsApi.sendObject('PUT', url, body, endpoint, predicate, resultExtractor, accept) 
     }
 
+    vstsApi.patchObject = (url, body, endpoint, predicate, resultExtractor, accept) => {
+        return vstsApi.sendObject('PATCH', url, body, endpoint, predicate, resultExtractor, accept) 
+    }
+
     vstsApi.sendObject = (method, url, body, endpoint, predicate, resultExtractor, accept) => {
         return new Promise((resolve, reject)=>{
             if (endpoint) endPoint = endpoint;
@@ -716,6 +720,26 @@ module.exports = function(vstsAccount, token) {
             return vstsApi.postObject('/' + projectId + "/_apis/release/releases", body, rmEndPoint)
         })
 
+    }
+
+    vstsApi.triggerReleaseEnvironment = (projectId, releaseId, environmentId) => {
+        return vstsApi.patchObject(
+            '/' + projectId + '/_apis/Release/releases/' + releaseId + '/environments/' + environmentId, 
+            {
+                "status":2,
+                "scheduledDeploymentTime":null,
+                "comment":null
+            }, 
+            rmEndPoint
+        )
+    }
+
+    // vstsApi.getReleaseByName = (projectId, existingReleaseName) => {
+    //     return vstsApi.getObject('/' + projectId + '/_apis/Release/releases/' + existingReleaseId, rmEndPoint)
+    // }
+
+    vstsApi.getReleaseById = (projectId, existingReleaseId) => {
+        return vstsApi.getObject('/' + projectId + '/_apis/Release/releases/' + existingReleaseId, rmEndPoint)
     }
 
     return vstsApi

@@ -17,15 +17,22 @@ program
     .version(package.version)
     .usage("[projectName]")
     .arguments('[projectName]')
-    .option('-b, --release <name of release definition>', 'release def to trigger')
+    .option('-r, --releasedef <name of release definition>', 'release def to trigger')
     .option('-w, --wait' , 'wait for release to finish.')
+    .option('--releaseid <releaseid>', 'use an existing release')
     .option('-a, --artifact', 'name of the artifact to use.',"")
-    .option('-e, --environmentcheck', 'check a particular environment deployed successfully and ignore the others. May be specified multiple times.', collect, [])
+    .option('-e, --environmentdeploy <environment_name>', 'trigger a particular environment to deploy.')
+    .option('-m, --manualenvironment <environment_name>', 'set an environment to manual. May be specified multiple times.', collect, [])
+    .option('-E, --environmentcheck <environment_name>', 'check a particular environment deployed successfully and ignore the others. May be specified multiple times.', collect, [])
     .action((ProjectName)=>{projectName = ProjectName})
     .parse(process.argv);
 
-var release = program.release;
+var releasedef = program.releasedef;
 var environmentsToCheck = program.environmentcheck;
+var manualEnvironments = program.manualenvironment;
+var environmentDeploy = program.environmentdeploy;
+var existingReleaseId = program.releaseid;
+
 var errCode = 0
 
 
@@ -40,7 +47,7 @@ if (!projectName) projectName = require("os").userInfo().username + '-' + timeSt
 
 console.log('---')
 log('project-name: ' + projectName )
-log('release-definition-name: '+ program.release)
+log('release-definition-name: '+ program.releasedef)
 
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // Helper Functions
@@ -62,6 +69,9 @@ var completionPredicate = (release, environmentsToCheck) => {
     }
 
     var status = release.environments.reduce((acc,i) => {
+        if (environmentsToCheck.indexOf(i.name) === -1) {
+            return acc
+        }
         acc.push("  " + i.name + ": " + i.status)
         return acc
     },[]).join("\n")
@@ -89,7 +99,7 @@ var completionPredicate = (release, environmentsToCheck) => {
     return [isFinished,result,status]
 }
 
-var waitForReleaseComplete = (release) => {
+var waitForReleaseComplete = (release, environmentsToCheck) => {
     return new Promise((resolve,reject) =>{
         console.log("status-check-log: |")
         var checkResult = () => {
@@ -146,7 +156,7 @@ Promise.resolve()
         }
     })
     .then(() =>{
-        return vstsApi.getReleaseDefinitionsbyName(projectId, release)
+        return vstsApi.getReleaseDefinitionsbyName(projectId, releasedef)
     })
     .then(definitions => {
         if ((definitions["length"] !== 1)) {
@@ -156,13 +166,31 @@ Promise.resolve()
 
         log("release-definition-id: " + definitions[0].id)
         log("release-definition-url: " + definitions[0].url)
-        return vstsApi.createRelease(projectId, definitions[0].id)
+
+        if (existingReleaseId) {
+            return vstsApi.getReleaseById(projectId, existingReleaseId)
+        } else {
+            return vstsApi.createRelease(projectId, definitions[0].id)
+        }
+
     })
     .then(release => {
         log("release-id: " + release.id)
         log("release-url: " + release.url)
+        return release
+    })
+    .then(release => {
+        if (typeof environmentDeploy == "string") {
+            let environmentId = release.environments.filter(e => e.name == environmentDeploy)[0].id
+
+            return vstsApi.triggerReleaseEnvironment(projectId, release.id, environmentId)
+            .then(()=>{return release})
+
+        } else {return release}
+    })
+    .then(release => {
         if (program.wait) {
-            return waitForReleaseComplete(release)
+            return waitForReleaseComplete(release, environmentsToCheck,manualEnvironments)
             .then(result=>{
                 if (result == "succeeded"){
                     errCode = 0
