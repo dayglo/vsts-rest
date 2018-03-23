@@ -516,48 +516,6 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
-    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinition, buildServiceEndpoints, overwrite)=>{
-
-        return Promise.all([
-            vstsApi.getObject('/_apis/projects/' + projectId),
-            vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues'),
-            vstsApi.getServiceEndpoints(projectId)
-        ])
-        .then((queryData)=>{
-            var project = queryData[0];
-            var projectQueues = queryData[1];
-            var projectServiceEndpoints = queryData[2];
-
-            var queue = projectQueues.value.filter(q => q.name == queueName)[0];
-            if (!queue) {
-                console.error("The queue " + queueName + " could not be found")
-                process.exit(12)
-            }
-
-            var buildServiceEndpointIds = mapServiceEndpointNamesToIds(buildServiceEndpoints, projectServiceEndpoints);
-
-            return vstsApi.getBuildDefinitionsbyName(projectId, buildDefinition.name)
-            .then(definitions => {
-                if ((definitions["length"]) && !overwrite) {
-                    return Promise.reject(new Error("The build definition already exists."))
-                }
-
-                if ((definitions["length"]) && overwrite) {
-                    console.log("Build definition " + buildDefinition.name + " already exists, updating...")
-                    return vstsApi._updateBuildDefinition(projectId, project.name, buildDefinition, definitions[0], buildServiceEndpointIds)  
-                }
-                return vstsApi._createBuildDefinition( projectId, project.name, queue.id, queueName, buildDefinition , buildDefinition.name, buildServiceEndpointIds)
-
-            })
-   
-     
-        })
-        .catch(e=>{
-            console.error('Couldn\'t create the build definition: ' + e + "\n" + e.stack)
-            process.exit(10)
-        })
-    }
-
     defaultRepository = (endPoint , projectName) => {
         return {
             properties: {
@@ -594,31 +552,111 @@ module.exports = function(vstsAccount, token) {
         return buildDefinition
     }
 
-    vstsApi._updateBuildDefinition = (projectId, projectName, buildDefinition, definitionIdProperties, buildServiceEndpointIds)  => {
+    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinition, buildServiceEndpoints, overwrite)=>{
+
+        return Promise.all([
+            vstsApi.getObject('/_apis/projects/' + projectId),
+            vstsApi.getObject('/DefaultCollection/'+ projectId +'/_apis/distributedtask/queues'),
+            vstsApi.getServiceEndpoints(projectId)
+        ])
+        .then((queryData)=>{
+            var project = queryData[0];
+            var projectQueues = queryData[1];
+            var projectServiceEndpoints = queryData[2];
+
+            var queue = projectQueues.value.filter(q => q.name == queueName)[0];
+            if (!queue) {
+                console.error("The queue " + queueName + " could not be found")
+                process.exit(12)
+            }
+
+            var buildServiceEndpointIds = mapServiceEndpointNamesToIds(buildServiceEndpoints, projectServiceEndpoints);
+
+            return vstsApi.getBuildDefinitionsbyName(projectId, buildDefinition.name)
+            .then(definitions => {
+                if ((definitions["length"]) && !overwrite) {
+                    return Promise.reject(new Error("The build definition already exists."))
+                }
+
+                if ((definitions["length"]) && overwrite) {
+                    console.log("Build definition " + buildDefinition.name + " already exists, updating...")
+                    return vstsApi._updateBuildDefinition(projectId, project.name, queue, buildDefinition, definitions[0], buildServiceEndpointIds)  
+                }
+                return vstsApi._createBuildDefinition( projectId, project.name, queue, buildDefinition , buildDefinition.name, buildServiceEndpointIds)
+            })
+   
+        })
+        .catch(e=>{
+            console.error('Couldn\'t create the build definition: ' + e + "\n" + e.stack)
+            process.exit(10)
+        })
+    }
+
+
+    vstsApi._updateBuildDefinition = (projectId, projectName, queue, buildDefinition, definitionIdProperties, buildServiceEndpointIds, buildDefinitionName)  => {
 
          _.merge(buildDefinition, definitionIdProperties)
 
-        buildDefinition.repository = defaultRepository(endPoint,projectName);
-        buildDefinition = applyBuildServiceEndpointMappings(buildDefinition, buildServiceEndpointIds)
-
-        return vstsApi.putObject(
-            '/' + projectId + '/_apis/build/definitions/' + buildDefinition.id,
-            buildDefinition
-        )
+        return vstsApi._assembleBuildDefinition(projectId, projectName, queue, buildDefinition, buildDefinitionName, definitionIdProperties.id, buildServiceEndpointIds)
+        .then(buildDefinition => {
+            return vstsApi.putObject(
+                '/' + projectId + '/_apis/build/definitions/' + buildDefinition.id,
+                buildDefinition
+            )
+        })
 
     }
 
-    vstsApi._createBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName, buildServiceEndpointIds)  => {
+    vstsApi._createBuildDefinition = (projectId, projectName, queue, buildDefinition, buildDefinitionName, buildServiceEndpointIds)  => {
 
-        buildDefinition = applyBuildServiceEndpointMappings(buildDefinition, buildServiceEndpointIds)
-
-        return vstsApi._assembleBuildDefinition(projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName)
+        return vstsApi._assembleBuildDefinition(projectId, projectName, queue, buildDefinition, buildDefinitionName, null, buildServiceEndpointIds)
         .then(buildDefinition => {
             return vstsApi.postObject(
                 '/' + projectId + '/_apis/build/definitions',
                 buildDefinition
             )
         })
+    }
+
+    vstsApi._assembleBuildDefinition = (projectId, projectName, queue, buildDefinition, buildDefinitionName, buildDefinitionId, buildServiceEndpointIds) => {
+
+        if (!buildDefinitionName) {
+            buildDefinitionName = buildDefinition.name;
+        }
+
+        if (buildDefinitionId) {
+            buildDefinition.id = buildDefinitionId
+            buildDefinition.uri = "vstfs:///Build/Definition/" + buildDefinitionId
+        }
+
+
+        buildDefinition = applyBuildServiceEndpointMappings(buildDefinition, buildServiceEndpointIds)
+        
+        var queue =  {
+            _links: {
+                self: {
+                    href: endPoint + '/_apis/build/Queues/' + queue.id
+                }
+            },
+            id: queue.id,
+            name: queue.name,
+            url: endPoint + '/_apis/build/Queues/' + queue.id,
+            pool: {
+                id: 4,
+                name: queue.name,
+                isHosted: true
+            }
+        }
+
+        buildDefinition.repository = defaultRepository(endPoint,projectName);
+
+        buildDefinition.queue = queue
+        
+        delete buildDefinition.project;
+        delete buildDefinition._links;
+
+        return Promise.resolve(buildDefinition)
+                    
     }
 
     vstsApi.getBuildDefinitionsbyName = (projectId, definitionName) => {
@@ -642,43 +680,6 @@ module.exports = function(vstsAccount, token) {
         return vstsApi.delObject('/' + projectId + '/_apis/build/definitions/' + definitionId)
     }
 
-    vstsApi._assembleBuildDefinition = (projectId, projectName, queueId, queueName, buildDefinition, buildDefinitionName, buildDefinitionId) => {
-
-        if (!buildDefinitionName) {
-            buildDefinitionName = buildDefinition.name;
-        }
-
-        if (buildDefinitionId) {
-            buildDefinition.id = buildDefinitionId
-            buildDefinition.uri = "vstfs:///Build/Definition/" + buildDefinitionId
-        }
-        
-        var queue =  {
-            _links: {
-                self: {
-                    href: endPoint + '/_apis/build/Queues/' + queueId
-                }
-            },
-            id: queueId,
-            name: queueName,
-            url: endPoint + '/_apis/build/Queues/' + queueId,
-            pool: {
-                id: 4,
-                name: queueName,
-                isHosted: true
-            }
-        }
-
-        buildDefinition.repository = defaultRepository(endPoint,projectName);
-
-        buildDefinition.queue = queue
-        
-        delete buildDefinition.project;
-        delete buildDefinition._links;
-
-        return Promise.resolve(buildDefinition)
-                    
-    }
 
     vstsApi.createRelease = (projectId, releaseDefId, manualEnvironments) =>{
 
