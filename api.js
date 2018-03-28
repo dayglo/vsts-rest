@@ -1,6 +1,8 @@
 var request = require("request");
 var _ = require('lodash');
 
+function existy(x) { return x != null };
+function truthy(x) { return (x !== false) && existy(x) };
 
 module.exports = function(vstsAccount, token) {
 
@@ -194,7 +196,7 @@ module.exports = function(vstsAccount, token) {
         .then(o => o.value)
     }
 
-    vstsApi.createReleaseDefinition = (projectName, projectId, buildDefinitionName, buildDefinitionId, releaseAgents, releaseDefinition, releaseServiceEndpoints, user, overwrite, releaseVariables) => { 
+    vstsApi.createReleaseDefinition = (projectName, projectId, buildDefinitionName, buildDefinitionId, releaseAgents, releaseDefinition, releaseServiceEndpoints, user, overwrite, releaseVariables, releaseDefinitionName) => { 
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
@@ -221,18 +223,46 @@ module.exports = function(vstsAccount, token) {
 
             var releaseServiceEndpointIds = mapServiceEndpointNamesToIds(releaseServiceEndpoints, projectServiceEndpoints);
 
-            return vstsApi.getReleaseDefinitionsbyName(projectId, releaseDefinition.name)
+            if (!existy(releaseDefinitionName)) {
+                releaseDefinitionName = releaseDefinition.name
+            } else {
+                releaseDefinition.name = releaseDefinitionName
+            }
+
+            return vstsApi.getReleaseDefinitionsbyName(projectId, releaseDefinitionName)
             .then(definitions => {
+
                 if ((definitions.length != 0) && !overwrite) {
                     return Promise.reject(new Error("The release definition already exists."))
                 }
 
                 if ((definitions.length != 0) && overwrite) {
-                    console.log("Release definition " + releaseDefinition.name + " already exists, updating...")
-                    return vstsApi.updateReleaseDefinition(defaultCollectionId, project.name, projectId, buildDefinitionName, buildDefinitionId, projectQueues.value, releaseAgents, releaseDefinition, definitions[0], releaseServiceEndpointIds, owner, releaseVariables)
+                    console.log("Release definition " + releaseDefinitionName + " already exists, updating...")
+                    return vstsApi.updateReleaseDefinition(defaultCollectionId, 
+                                                            project.name, 
+                                                            projectId, 
+                                                            buildDefinitionName, 
+                                                            buildDefinitionId, 
+                                                            projectQueues.value, 
+                                                            releaseAgents, 
+                                                            releaseDefinition, 
+                                                            definitions[0], 
+                                                            releaseServiceEndpointIds, 
+                                                            owner, 
+                                                            releaseVariables)
                 }
 
-                return vstsApi._createReleaseDefinition(defaultCollectionId, project.name, projectId, buildDefinitionName, buildDefinitionId, projectQueues.value, releaseAgents, releaseDefinition, releaseServiceEndpointIds, owner, releaseVariables)
+                return vstsApi._createReleaseDefinition(defaultCollectionId, 
+                                                        project.name, 
+                                                        projectId, 
+                                                        buildDefinitionName, 
+                                                        buildDefinitionId, 
+                                                        projectQueues.value, 
+                                                        releaseAgents, 
+                                                        releaseDefinition, 
+                                                        releaseServiceEndpointIds, 
+                                                        owner, 
+                                                        releaseVariables)
             })
 
         })

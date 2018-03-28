@@ -29,6 +29,7 @@ program
     .option('-v, --var [release_env_name:]variable=value', 'override variables in your release definition.' , collect, [])
     .option('--buildservice <input key=Service endpoint name>', 'override service endpoints in your build definition.' ,collect, [])
     .option('--releaseservice <input key=Service endpoint name> ', 'override service endpoints in your build definition.' , collect, [])
+    .option('--releasedefname <release_def_name>' , 'override the release name' )
     .option('--no-git', 'don\'t push the repo to vsts', false )
 
     .action((ProjectName)=>{projectName = ProjectName})
@@ -39,6 +40,7 @@ var buildFile = program.build;
 var releaseFile = program.release;
 var buildAgent = program.buildagent;
 var releaseAgent = program.releaseagent;
+var newReleaseDefName = program.releasedefname;
 
 
 var releaseVariables = {
@@ -250,7 +252,8 @@ Promise.all([
         releaseServiceEndpoints, 
         user, 
         true, 
-        releaseVariables
+        releaseVariables,
+        newReleaseDefName
     ) 
 })
 .then(json => {
