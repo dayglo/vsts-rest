@@ -8,7 +8,6 @@ const fse = require('fs-extra')
 const tmp = require('tmp');
 const spawn = require('child_process').spawn;
 
-
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // Init
 //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -30,6 +29,7 @@ program
     .option('--buildservice <input key=Service endpoint name>', 'override service endpoints in your build definition.' ,collect, [])
     .option('--releaseservice <input key=Service endpoint name> ', 'override service endpoints in your build definition.' , collect, [])
     .option('--releasedefname <release_def_name>' , 'override the release name' )
+    .option('-x, --buildjsonpath <jsonpath=value>' , 'override any part of the build def before importing' , collect, [])
     .option('--no-git', 'don\'t push the repo to vsts', false )
 
     .action((ProjectName)=>{projectName = ProjectName})
@@ -95,6 +95,15 @@ var releaseServiceEndpoints = program.releaseservice.reduce((acc,i)=>{
     acc[key] = value
     return acc
 },{})
+
+var buildJsonPaths = program.buildjsonpath.reduce((acc,i)=>{
+    var splitIndex = i.lastIndexOf('=');
+    var key = i.substr(0,splitIndex);
+    var value = i.substr(splitIndex+1)
+    acc[key] = value
+    return acc
+},{})
+
 
 if (!process.env.VSTS_ACCOUNT)           {console.log("Env var VSTS_ACCOUNT is not set. (This is the first part of your vsts project domain name). ") ; process.exit(1)}
 if (!process.env.VSTS_PAT)               {console.log("Env var VSTS_PAT is not set. You need to generate one form the VSTS UI. Make sure it has access to the correct projects.") ; process.exit(1)}
@@ -224,7 +233,7 @@ Promise.all([
 .then(project => {
     log("creating build definition: " + chalk.magenta(buildDefinition.name))
     projectId = project.id
-    return vstsApi.createBuildDefinition(project.id, buildAgent, buildDefinition, buildServiceEndpoints ,true)
+    return vstsApi.createBuildDefinition(project.id, buildAgent, buildDefinition, buildServiceEndpoints , buildJsonPaths ,true)
 })
 .then(buildDef => {
     buildDefId  = buildDef.id

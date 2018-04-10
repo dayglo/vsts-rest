@@ -1,5 +1,6 @@
 var request = require("request");
 var _ = require('lodash');
+const jp = require('jsonpath');
 
 function existy(x) { return x != null };
 function truthy(x) { return (x !== false) && existy(x) };
@@ -17,7 +18,7 @@ module.exports = function(vstsAccount, token) {
         origin: endPoint,
     }
 
-    function checkResponse(resolve,reject,predicate,resultExtractor){
+    function checkResponse(resolve, reject, predicate, resultExtractor){
         return (error, response, body) => {
             if (!predicate)         predicate       = () => {return true}
             if (!resultExtractor)   resultExtractor = x => x
@@ -582,7 +583,7 @@ module.exports = function(vstsAccount, token) {
         return buildDefinition
     }
 
-    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinition, buildServiceEndpoints, overwrite)=>{
+    vstsApi.createBuildDefinition = (projectId, queueName, buildDefinition, buildServiceEndpoints, buildJsonPaths, overwrite)=>{
 
         return Promise.all([
             vstsApi.getObject('/_apis/projects/' + projectId),
@@ -610,9 +611,9 @@ module.exports = function(vstsAccount, token) {
 
                 if ((definitions["length"]) && overwrite) {
                     console.log("Build definition " + buildDefinition.name + " already exists, updating...")
-                    return vstsApi._updateBuildDefinition(projectId, project.name, queue, buildDefinition, definitions[0], buildServiceEndpointIds)  
+                    return vstsApi._updateBuildDefinition(projectId, project.name, queue, buildDefinition, definitions[0], buildServiceEndpointIds , buildJsonPaths)  
                 }
-                return vstsApi._createBuildDefinition( projectId, project.name, queue, buildDefinition , buildDefinition.name, buildServiceEndpointIds)
+                return vstsApi._createBuildDefinition( projectId, project.name, queue, buildDefinition , buildDefinition.name, buildServiceEndpointIds , buildJsonPaths)
             })
    
         })
@@ -623,11 +624,11 @@ module.exports = function(vstsAccount, token) {
     }
 
 
-    vstsApi._updateBuildDefinition = (projectId, projectName, queue, buildDefinition, definitionIdProperties, buildServiceEndpointIds, buildDefinitionName)  => {
+    vstsApi._updateBuildDefinition = (projectId, projectName, queue, buildDefinition, definitionIdProperties, buildServiceEndpointIds, buildJsonPaths, buildDefinitionName)  => {
 
          _.merge(buildDefinition, definitionIdProperties)
 
-        return vstsApi._assembleBuildDefinition(projectId, projectName, queue, buildDefinition, buildDefinitionName, definitionIdProperties.id, buildServiceEndpointIds)
+        return vstsApi._assembleBuildDefinition(projectId, projectName, queue, buildDefinition, buildDefinitionName, definitionIdProperties.id, buildServiceEndpointIds , buildJsonPaths)
         .then(buildDefinition => {
             return vstsApi.putObject(
                 '/' + projectId + '/_apis/build/definitions/' + buildDefinition.id,
@@ -637,9 +638,9 @@ module.exports = function(vstsAccount, token) {
 
     }
 
-    vstsApi._createBuildDefinition = (projectId, projectName, queue, buildDefinition, buildDefinitionName, buildServiceEndpointIds)  => {
+    vstsApi._createBuildDefinition = (projectId, projectName, queue, buildDefinition, buildDefinitionName, buildServiceEndpointIds, buildJsonPaths)  => {
 
-        return vstsApi._assembleBuildDefinition(projectId, projectName, queue, buildDefinition, buildDefinitionName, null, buildServiceEndpointIds)
+        return vstsApi._assembleBuildDefinition(projectId, projectName, queue, buildDefinition, buildDefinitionName, null, buildServiceEndpointIds , buildJsonPaths)
         .then(buildDefinition => {
             return vstsApi.postObject(
                 '/' + projectId + '/_apis/build/definitions',
@@ -648,7 +649,14 @@ module.exports = function(vstsAccount, token) {
         })
     }
 
-    vstsApi._assembleBuildDefinition = (projectId, projectName, queue, buildDefinition, buildDefinitionName, buildDefinitionId, buildServiceEndpointIds) => {
+    applyBuildJsonPaths = (buildDefinition , buildJsonPaths) => {
+        _.forIn(buildJsonPaths,(value,jsonpath)=>{
+            jp.value(buildDefinition, jsonpath, value)
+        })
+        return buildDefinition
+    }
+
+    vstsApi._assembleBuildDefinition = (projectId, projectName, queue, buildDefinition, buildDefinitionName, buildDefinitionId, buildServiceEndpointIds , buildJsonPaths) => {
 
         if (!buildDefinitionName) {
             buildDefinitionName = buildDefinition.name;
@@ -659,7 +667,7 @@ module.exports = function(vstsAccount, token) {
             buildDefinition.uri = "vstfs:///Build/Definition/" + buildDefinitionId
         }
 
-
+        buildDefinition = applyBuildJsonPaths(buildDefinition , buildJsonPaths)
         buildDefinition = applyBuildServiceEndpointMappings(buildDefinition, buildServiceEndpointIds)
         
         var queue =  {
