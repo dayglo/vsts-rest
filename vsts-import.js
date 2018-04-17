@@ -49,7 +49,8 @@ var releaseVariables = {
 }
 
 releaseVariables = program.var.reduce((acc,i) => {
-    var [key,value] = i.split('=')
+    var parts = i.split('=')
+    var [key,value] = [ parts.shift(), parts.join('=') ]
     
     if (key.indexOf(":") == -1) { 
         acc.release[key] = value
