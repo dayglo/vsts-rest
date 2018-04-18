@@ -31,6 +31,8 @@ program
     .option('--releasedefname <release_def_name>' , 'override the release name' )
     .option('-x, --buildjsonpath <jsonpath=value>' , 'override any part of the build def before importing' , collect, [])
     .option('--no-git', 'don\'t push the repo to vsts', false )
+    .option('--no-autobuild', 'don\'t build the project on import', false )
+
 
     .action((ProjectName)=>{projectName = ProjectName})
     .parse(process.argv);
@@ -247,8 +249,11 @@ Promise.all([
     return Promise.resolve()
 })
 .then(()=>{
-    log("starting build")
-    return vstsApi.startBuild(projectId, buildDefId)
+    if (program.autobuild) {
+        log("starting build")
+        return vstsApi.startBuild(projectId, buildDefId)
+    }
+    return Promise.resolve()
 })
 .then(() => {
     log("creating release definition: " + chalk.green(releaseDefinition.name))
