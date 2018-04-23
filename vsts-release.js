@@ -43,8 +43,6 @@ var token =                  process.env.VSTS_PAT;
 var vstsApi = new VstsApi(vstsAccount,token);
 
 
-if (!projectName) projectName = require("os").userInfo().username + '-' + timeStamp;
-
 console.log('---')
 log('project-name: ' + projectName )
 log('release-definition-name: '+ program.releasedef)
@@ -63,7 +61,7 @@ function collect(val, memo) {
 }
 
 var completionPredicate = (release, environmentsToCheck) => {
-    
+
     if (environmentsToCheck === undefined) {
         environmentsToCheck = release.environments.map(x => x.name)
     }
@@ -117,9 +115,12 @@ var waitForReleaseComplete = (release, environmentsToCheck) => {
                         console.log("result: " + result)
                         resolve(result)
                     }
-                    
+
                 }
-            )
+            ).catch((e)=>{
+                console.log("Exception caught in release status check. ("+e.message+") Continuing....")
+                checkResult()
+            })
         }
         checkResult()
     })
@@ -139,77 +140,69 @@ function sayError(e){
 var projectId
 
 
-Promise.resolve()
+return Promise.resolve()
 .then(()=>{
+    return vstsApi.getProjectByName(projectName)
+})
+.then(project => {
+    if (project) {
+        projectId = project.id
+    }
+    else {
+        log("error: project didnt exist")
+        process.exit(0)
+    }
+})
+.then(() =>{
+    return vstsApi.getReleaseDefinitionsbyName(projectId, releasedef)
+})
+.then(definitions => {
+    if ((definitions["length"] !== 1)) {
+        throw new Error("The release definition did not exist or was not uniquely named.")
+        return
+    }
 
-    return Promise.resolve()
-    .then(()=>{
-        return vstsApi.getProjectByName(projectName)
-    })
-    .then(project => {
-        if (project) {
-            projectId = project.id
-        } 
-        else {
-            log("error: project didnt exist")
-            process.exit(0)
-        }
-    })
-    .then(() =>{
-        return vstsApi.getReleaseDefinitionsbyName(projectId, releasedef)
-    })
-    .then(definitions => {
-        if ((definitions["length"] !== 1)) {
-            throw new Error("The release definition did not exist or was not uniquely named.")
-            return 
-        }
+    log("release-definition-id: " + definitions[0].id)
+    log("release-definition-url: " + definitions[0].url)
 
-        log("release-definition-id: " + definitions[0].id)
-        log("release-definition-url: " + definitions[0].url)
-
-        if (existingReleaseId) {
-            return vstsApi.getReleaseById(projectId, existingReleaseId)
-        } else {
-            return vstsApi.createRelease(projectId, definitions[0].id)
-        }
-
-    })
-    .then(release => {
-        log("release-id: " + release.id)
-        log("release-url: " + release.url)
-        return release
-    })
-    .then(release => {
-        if (typeof environmentDeploy == "string") {
-            let environmentId = release.environments.filter(e => e.name == environmentDeploy)[0].id
-
-            return vstsApi.triggerReleaseEnvironment(projectId, release.id, environmentId)
-            .then(()=>{return release})
-
-        } else {return release}
-    })
-    .then(release => {
-        if (program.wait) {
-            return waitForReleaseComplete(release, environmentsToCheck,manualEnvironments)
-            .then(result=>{
-                if (result == "succeeded"){
-                    errCode = 0
-                } else {
-                    errCode = 2
-                }
-            })
-        } else {
-            return release
-        }
-
-    })
-    .catch(sayError)
+    if (existingReleaseId) {
+        return vstsApi.getReleaseById(projectId, existingReleaseId)
+    } else {
+        return vstsApi.createRelease(projectId, definitions[0].id)
+    }
 
 })
+.then(release => {
+    log("release-id: " + release.id)
+    log("release-url: " + release.url)
+    return release
+})
+.then(release => {
+    if (typeof environmentDeploy == "string") {
+        let environmentId = release.environments.filter(e => e.name == environmentDeploy)[0].id
+
+        return vstsApi.triggerReleaseEnvironment(projectId, release.id, environmentId)
+        .then(()=>{return release})
+
+    } else {return release}
+})
+.then(release => {
+    if (program.wait) {
+        return waitForReleaseComplete(release, environmentsToCheck,manualEnvironments)
+        .then(result=>{
+            if (result == "succeeded"){
+                errCode = 0
+            } else {
+                errCode = 2
+            }
+        })
+    } else {
+        return release
+    }
+
+})
+.catch(sayError)
 .then(()=>{
     log('...')
     process.exit(errCode)
 })
-
-
-
