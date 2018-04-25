@@ -164,6 +164,8 @@ return Promise.resolve()
 
     log("release-definition-id: " + definitions[0].id)
     log("release-definition-url: " + definitions[0].url)
+    log("release-definition-weburl: " + definitions[0]._links.web.href)
+
 
     if (existingReleaseId) {
         return vstsApi.getReleaseById(projectId, existingReleaseId)
@@ -175,6 +177,7 @@ return Promise.resolve()
 .then(release => {
     log("release-id: " + release.id)
     log("release-url: " + release.url)
+    log("release-weburl: " + release._links.web.href)
     return release
 })
 .then(release => {
